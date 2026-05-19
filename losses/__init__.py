@@ -1,4 +1,4 @@
-from .loss import MSELoss, L1Loss, CharbonnierLoss, SSIM, VGGLoss, EdgeLoss, FrequencyLoss, EnhanceLoss
+from .loss import MSELoss, L1Loss, CharbonnierLoss, SSIM, VGGLoss, EdgeLoss, FrequencyLoss, L_enhance as EnhanceLoss
 
 def create_loss(opt, rank):
     
@@ -36,18 +36,19 @@ def create_loss(opt, rank):
         if rank==0: print(f"Using edge loss {opt['edge_criterion']} with weight {opt['edge_weight']}")
     # the frequency loss
     if opt['frequency']:
-        frequency_loss = FrequencyLoss(loss_weight = opt['edge_weight'],
+        frequency_loss = FrequencyLoss(loss_weight = opt['frequency_weight'],
                                 reduction = opt['edge_reduction'],
                                 criterion = opt['frequency_criterion']).to(rank)
-        losses['frequecy_loss'] = frequency_loss
+        losses['frequency_loss'] = frequency_loss
         if rank==0: print(f"Using frequency loss {opt['frequency_criterion']} with weight {opt['frequency_weight']}")
     # the enhance loss
     if opt['enhance']:
-        enhance_loss = EnhanceLoss(loss_weight= opt['enhance_weight'],
-                                reduction = opt['enhance_reduction'],
-                                criterion = opt['enhance_criterion']).to(rank)
+        enhance_loss = EnhanceLoss(loss_weight=opt['enhance_weight'],
+                                   gamma1=opt.get('enhance_gamma1', 0.5),
+                                   gamma2=opt.get('enhance_gamma2', 0.3),
+                                   gamma3=opt.get('enhance_gamma3', 0.2)).to(rank)
         losses['enhance_loss'] = enhance_loss
-        if rank==0: print(f"Using enhance loss {opt['enhance_criterion']} with weight {opt['enhance_weight']}")
+        if rank==0: print(f"Using enhance loss with weight {opt['enhance_weight']}")
     
     return losses
 
