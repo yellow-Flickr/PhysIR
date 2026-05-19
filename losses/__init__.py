@@ -1,13 +1,15 @@
-from .loss import MSELoss, L1Loss, CharbonnierLoss, SSIM, VGGLoss, EdgeLoss, FrequencyLoss, L_enhance as EnhanceLoss
+from .loss import (MSELoss, L1Loss, CharbonnierLoss, SSIM, VGGLoss,
+                   EdgeLoss, FrequencyLoss, EnhanceLoss,
+                   RetinexLoss, BlurAwareGradientLoss, PhaseEnhancedFrequencyLoss)
+
 
 def create_loss(opt, rank):
-    
     '''
-    Returns the needed losses for evaluating our model
+    Returns the needed losses for evaluating our model.
+    opt: dictionary from the yaml config root.
     '''
     losses = dict()
-    
-    # first the pixel losses
+
     if opt['pixel_criterion'] == 'l1':
         pixel_loss = L1Loss()
     elif opt['pixel_criterion'] == 'l2':
@@ -18,59 +20,91 @@ def create_loss(opt, rank):
         raise NotImplementedError('Pixel Criterion not implemented')
 
     losses['pixel_loss'] = pixel_loss.to(rank)
-    if rank == 0: print(f"Using pixel loss {opt['pixel_criterion']} ")
-    # now the perceptual loss
-    if opt['perceptual']:     
-        perceptual_loss = VGGLoss(loss_weight = opt['perceptual_weight'],
-                                criterion = opt['perceptual_criterion'],
-                                reduction = opt['perceptual_reduction']).to(rank)
+    if rank == 0: print(f"Using pixel loss {opt['pixel_criterion']}")
+
+    if opt['perceptual']:
+        perceptual_loss = VGGLoss(loss_weight=opt['perceptual_weight'],
+                                  criterion=opt['perceptual_criterion'],
+                                  reduction=opt['perceptual_reduction']).to(rank)
         losses['perceptual_loss'] = perceptual_loss
-        if rank==0: print(f"Using perceptual loss {opt['perceptual_criterion']} with weight {opt['perceptual_weight']}")
-    # the edge loss
-    if opt['edge']: 
-        edge_loss = EdgeLoss(loss_weight = opt['edge_weight'],
-                                criterion = opt['edge_criterion'],
-                                reduction = opt['edge_reduction'],
-                                rank = rank).to(rank)
+        if rank == 0: print(f"Using perceptual loss {opt['perceptual_criterion']} "
+                            f"weight {opt['perceptual_weight']}")
+
+    if opt['edge']:
+        edge_loss = EdgeLoss(loss_weight=opt['edge_weight'],
+                             criterion=opt['edge_criterion'],
+                             reduction=opt['edge_reduction'],
+                             rank=rank).to(rank)
         losses['edge_loss'] = edge_loss
-        if rank==0: print(f"Using edge loss {opt['edge_criterion']} with weight {opt['edge_weight']}")
-    # the frequency loss
+        if rank == 0: print(f"Using edge loss {opt['edge_criterion']} "
+                            f"weight {opt['edge_weight']}")
+
     if opt['frequency']:
-        frequency_loss = FrequencyLoss(loss_weight = opt['frequency_weight'],
-                                reduction = opt['edge_reduction'],
-                                criterion = opt['frequency_criterion']).to(rank)
+        frequency_loss = FrequencyLoss(loss_weight=opt['frequency_weight'],
+                                       reduction=opt['edge_reduction'],
+                                       criterion=opt['frequency_criterion']).to(rank)
         losses['frequency_loss'] = frequency_loss
-        if rank==0: print(f"Using frequency loss {opt['frequency_criterion']} with weight {opt['frequency_weight']}")
-    # the enhance loss
+        if rank == 0: print(f"Using frequency loss {opt['frequency_criterion']} "
+                            f"weight {opt['frequency_weight']}")
+
     if opt['enhance']:
         enhance_loss = EnhanceLoss(loss_weight=opt['enhance_weight'],
-                                   gamma1=opt.get('enhance_gamma1', 0.5),
-                                   gamma2=opt.get('enhance_gamma2', 0.3),
-                                   gamma3=opt.get('enhance_gamma3', 0.2)).to(rank)
+                                   criterion=opt['enhance_criterion'],
+                                   reduction=opt['enhance_reduction']).to(rank)
         losses['enhance_loss'] = enhance_loss
-        if rank==0: print(f"Using enhance loss with weight {opt['enhance_weight']}")
-    
+        if rank == 0: print(f"Using enhance loss {opt['enhance_criterion']} "
+                            f"weight {opt['enhance_weight']}")
+
     return losses
 
-def calculate_loss(all_losses,
-                   enhanced_batch,
-                   high_batch,
-                   outside_batch = None, scale_factor=8):
+
+def create_physics_loss(opt, device):
     '''
-    Returns the calculated values of the losses for optimization.
-    outsize_batch: if None it doen't apply the enhance loss
+    Instantiates physics-guided losses from the physics_losses config block.
+
+    Returns:
+        losses      : dict of loss modules (already moved to device)
+        extra_params: list of extra trainable params (learnable blur sigma)
+                      — pass to the optimizer alongside model.parameters()
     '''
-    
+    losses       = {}
+    extra_params = []
+
+    if opt.get('retinex', True):
+        rl = RetinexLoss(weight=opt.get('retinex_weight', 0.10)).to(device)
+        losses['retinex_loss'] = rl
+
+    if opt.get('blur', True):
+        bl = BlurAwareGradientLoss(weight=opt.get('blur_weight', 0.05)).to(device)
+        losses['blur_loss'] = bl
+        extra_params += list(bl.parameters())  # includes learnable sigma
+
+    if opt.get('phase', True):
+        pl = PhaseEnhancedFrequencyLoss(weight=opt.get('phase_weight', 0.05)).to(device)
+        losses['phase_loss'] = pl
+
+    return losses, extra_params
+
+
+def calculate_loss(all_losses, enhanced_batch, high_batch,
+                   outside_batch=None, scale_factor=8):
+    '''
+    Sums all active supervised losses.
+    outside_batch: optional side-output from the encoder mid-point.
+    '''
     l_pixel = all_losses['pixel_loss'](enhanced_batch, high_batch)
-    if 'perceptual_loss' in all_losses: 
+    if 'perceptual_loss' in all_losses:
         l_pixel += all_losses['perceptual_loss'](enhanced_batch, high_batch)
-    if 'edge_loss' in all_losses: 
+    if 'edge_loss' in all_losses:
         l_pixel += all_losses['edge_loss'](enhanced_batch, high_batch)
     if 'frequency_loss' in all_losses:
         l_pixel += all_losses['frequency_loss'](enhanced_batch, high_batch)
     if 'enhance_loss' in all_losses and outside_batch is not None:
-        l_pixel += all_losses['enhance_loss'](outside_batch, high_batch, scale_factor = scale_factor)    
-
+        l_pixel += all_losses['enhance_loss'](outside_batch, high_batch,
+                                              scale_factor=scale_factor)
     return l_pixel
 
-__all__ = ['create_loss', 'calculate_loss', 'SSIM', 'VGGLoss']
+
+__all__ = ['create_loss', 'create_physics_loss', 'calculate_loss',
+           'SSIM', 'VGGLoss',
+           'RetinexLoss', 'BlurAwareGradientLoss', 'PhaseEnhancedFrequencyLoss']
