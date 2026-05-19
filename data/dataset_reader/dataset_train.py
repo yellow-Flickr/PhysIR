@@ -12,7 +12,8 @@ _SUPPORTED = {'.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'}
 
 
 def _collect_images(directory):
-    return sorted(str(p) for p in Path(directory).iterdir() if p.suffix in _SUPPORTED)
+    # rglob handles both flat datasets (LOLv2) and nested ones (LOLBlur video clips)
+    return sorted(str(p) for p in Path(directory).rglob('*') if p.suffix in _SUPPORTED)
 
 
 def create_train_loader(low_dir, high_dir,
