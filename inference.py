@@ -3,7 +3,7 @@ from PIL import Image
 import cv2 as cv
 from options.options import parse
 import argparse
-
+from archs.retinexformer import RetinexFormer
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 parser = argparse.ArgumentParser(description="Script for prediction")

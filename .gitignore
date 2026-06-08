@@ -38,4 +38,3 @@ train.py
 computing_test.py
 /utils/train_utils.py
 /options/train
-.venv/
