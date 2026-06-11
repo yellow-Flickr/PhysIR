@@ -548,11 +548,24 @@ class RetinexLoss(nn.Module):
         self.pool = nn.MaxPool2d(pool_kernel, stride=1, padding=pad)
 
     def forward(self, x_pred):
+        eps = 1e-6
         L  = self.pool(x_pred.max(dim=1, keepdim=True).values).clamp(min=1e-6)
         L3 = L.expand_as(x_pred)
         R  = x_pred / L3
+
+        # Extract log illuminations
+        # log_L3 = torch.log(L3 + eps)
+        # log_L_target = torch.log(pool(target.max(dim=1, keepdim=True).values) + eps)
+
+
         smooth_h  = torch.abs(L[:, :, 1:, :] - L[:, :, :-1, :]).mean()
         smooth_w  = torch.abs(L[:, :, :, 1:] - L[:, :, :, :-1]).mean()
+
+        # Extract log reflectances: log(R) = log(S) - log(L)
+        # log_R_pred = torch.log(x_pred + eps) - log_L3
+        # log_R_target = torch.log(target + eps) - log_L_target
+
+        # recon = F.l1_loss(log_R_pred, log_R_target)
         recon     = F.l1_loss(R * L3, x_pred)
         return self.weight * (self.smooth_weight * (smooth_h + smooth_w) + self.recon_weight * recon)
 
