@@ -34,6 +34,7 @@ metrics.sh
 /data/datasets/*
 
 # Comment the next lines if train is uploaded
+<<<<<<< HEAD
 # train.py
 # computing_test.py
 # /utils/train_utils.py
@@ -44,3 +45,11 @@ metrics.sh
 /.error
 /.notebooks
 .claude/.DS_Store
+=======
+train.py
+computing_test.py
+/utils/train_utils.py
+/options/train
+*.md
+!README.md
+>>>>>>> 87a4fa1 (restruct)
