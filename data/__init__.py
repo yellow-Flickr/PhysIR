@@ -17,8 +17,8 @@ def create_test_data(rank, world_size, opt):
     name = opt['name']
     test_path = opt['val']['test_path']
     batch_size_test=opt['val']['batch_size_test']
-    verbose=opt['train']['verbose']
-    num_workers=opt['train']['n_workers']
+    verbose=opt['train'].get('verbose', False)
+    num_workers=opt['train'].get('n_workers', 0)
     
     if rank != 0:
         verbose = False

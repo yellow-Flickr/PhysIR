@@ -318,7 +318,19 @@ class CharbonnierLoss(nn.Module):
 class VGG19(torch.nn.Module):
     def __init__(self, requires_grad=False):
         super().__init__()
-        vgg_pretrained_features = torchvision.models.vgg19(weights=torchvision.models.VGG19_Weights.IMAGENET1K_V1).features
+        try:
+            vgg_pretrained_features = torchvision.models.vgg19(
+                weights=torchvision.models.VGG19_Weights.IMAGENET1K_V1).features
+        except Exception:
+            # SSL cert failure on some Python.org installs — retry with unverified context
+            import ssl
+            _orig = ssl._create_default_https_context
+            ssl._create_default_https_context = ssl._create_unverified_context
+            try:
+                vgg_pretrained_features = torchvision.models.vgg19(
+                    weights=torchvision.models.VGG19_Weights.IMAGENET1K_V1).features
+            finally:
+                ssl._create_default_https_context = _orig
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
         self.slice3 = torch.nn.Sequential()
@@ -346,6 +358,26 @@ class VGG19(torch.nn.Module):
         h_relu5 = self.slice5(h_relu4)
         out = [h_relu1, h_relu2, h_relu3, h_relu4, h_relu5]
         return out
+
+
+class LPIPSLoss(nn.Module):
+    """
+    LPIPS perceptual loss — faithfully reproduces DarkIR's L_percep (Feijoo et al. 2025, Eq. 6:
+    LPIPS based on VGG19). NOTE this is DIFFERENT from VGGLoss: LPIPS adds learned linear
+    calibration on top of VGG features, whereas VGGLoss is a plain multi-layer VGG feature loss.
+    Inputs assumed in [0,1]; LPIPS expects [-1,1].
+    """
+
+    def __init__(self, loss_weight=0.01, net='vgg'):
+        super().__init__()
+        import lpips as _lpips
+        self.lpips = _lpips.LPIPS(net=net, verbose=False)
+        for p in self.lpips.parameters():
+            p.requires_grad_(False)
+        self.weight = loss_weight
+
+    def forward(self, x, y):
+        return self.weight * self.lpips(x * 2 - 1, y * 2 - 1).mean()
 
 
 class VGGLoss(nn.Module):
@@ -532,10 +564,18 @@ class EnhanceLoss(nn.Module):
 
 class RetinexLoss(nn.Module):
     """
-    Physics-guided Retinex decomposition regulariser.
+    Physics-guided Retinex decomposition loss.
 
-    Illumination L is estimated via max-pool over the max-channel image.
-    Two terms: TV smoothness on L, and Retinex reconstruction consistency.
+    Two terms:
+      - TV smoothness on the estimated illumination map L.
+      - Log-domain reflectance consistency: |log(R_pred) - log(R_target)|
+        where R = S / L, estimated via max-pool over the brightest channel.
+
+    Log domain is the natural Retinex space (Land & McCann, 1977) and gives
+    uniform gradient magnitude across brightness levels — important for
+    low-light inputs where linear-domain comparison biases toward bright pixels.
+
+    eps=1e-4 (not 1e-6) to keep gradients stable for near-zero dark pixels.
     Training-only — zero inference overhead.
     """
 
@@ -547,26 +587,21 @@ class RetinexLoss(nn.Module):
         pad = pool_kernel // 2
         self.pool = nn.MaxPool2d(pool_kernel, stride=1, padding=pad)
 
-    def forward(self, x_pred):
-        eps = 1e-6
-        L  = self.pool(x_pred.max(dim=1, keepdim=True).values).clamp(min=1e-6)
-        L3 = L.expand_as(x_pred)
-        R  = x_pred / L3
+    def forward(self, x_pred, target):
+        eps = 1e-4
 
-        # Extract log illuminations
-        # log_L3 = torch.log(L3 + eps)
-        # log_L_target = torch.log(pool(target.max(dim=1, keepdim=True).values) + eps)
+        L_pred   = self.pool(x_pred.max(dim=1, keepdim=True).values).clamp(min=eps)
+        L_target = self.pool(target.max(dim=1, keepdim=True).values).clamp(min=eps)
 
+        # TV smoothness on predicted illumination map
+        smooth_h = torch.abs(L_pred[:, :, 1:, :] - L_pred[:, :, :-1, :]).mean()
+        smooth_w = torch.abs(L_pred[:, :, :, 1:] - L_pred[:, :, :, :-1]).mean()
 
-        smooth_h  = torch.abs(L[:, :, 1:, :] - L[:, :, :-1, :]).mean()
-        smooth_w  = torch.abs(L[:, :, :, 1:] - L[:, :, :, :-1]).mean()
+        # Log-domain reflectance comparison: log(R) = log(S) - log(L)
+        log_R_pred   = torch.log(x_pred  + eps) - torch.log(L_pred.expand_as(x_pred)   + eps)
+        log_R_target = torch.log(target  + eps) - torch.log(L_target.expand_as(target) + eps)
+        recon = F.l1_loss(log_R_pred, log_R_target)
 
-        # Extract log reflectances: log(R) = log(S) - log(L)
-        # log_R_pred = torch.log(x_pred + eps) - log_L3
-        # log_R_target = torch.log(target + eps) - log_L_target
-
-        # recon = F.l1_loss(log_R_pred, log_R_target)
-        recon     = F.l1_loss(R * L3, x_pred)
         return self.weight * (self.smooth_weight * (smooth_h + smooth_w) + self.recon_weight * recon)
 
 
@@ -646,8 +681,15 @@ class PhaseEnhancedFrequencyLoss(nn.Module):
         return mask
 
     def forward(self, pred, target):
-        pf   = torch.fft.rfft2(pred,   norm='backward')
-        tf   = torch.fft.rfft2(target, norm='backward')
+        # rfft2 is unsupported on some backends (e.g. MPS); route through CPU when
+        # not on CUDA. .cpu() on a CPU tensor is a no-op so the CPU path is unaffected.
+        dev = pred.device
+        if pred.is_cuda:
+            pf = torch.fft.rfft2(pred,        norm='backward')
+            tf = torch.fft.rfft2(target,      norm='backward')
+        else:
+            pf = torch.fft.rfft2(pred.cpu(),  norm='backward').to(dev)
+            tf = torch.fft.rfft2(target.cpu(),norm='backward').to(dev)
         mask = self._high_pass_mask(pf.shape, pf.device)
 
         amp_loss = F.l1_loss(pf.abs() * mask, tf.abs() * mask)

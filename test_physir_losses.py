@@ -18,10 +18,11 @@ def test_retinex_loss():
 
     loss_fn = RetinexLoss(weight=0.1, smooth_weight=0.5, recon_weight=0.5)
 
-    pred = torch.rand(2, 3, 64, 64, requires_grad=True)
+    pred   = torch.rand(2, 3, 64, 64, requires_grad=True)
+    target = torch.rand(2, 3, 64, 64)
 
     # Basic compute
-    loss = loss_fn(pred)
+    loss = loss_fn(pred, target)
     assert not torch.isnan(loss),  "RetinexLoss returned NaN"
     assert not torch.isinf(loss),  "RetinexLoss returned Inf"
     assert loss.item() > 0,        "RetinexLoss is zero (suspicious)"
@@ -31,23 +32,32 @@ def test_retinex_loss():
     assert pred.grad is not None,                    "No gradients to pred"
     assert not torch.isnan(pred.grad).any(),         "NaN in gradients"
 
-    # Smoothness: uniform image should have lower TV loss than random
-    uniform = torch.ones(2, 3, 64, 64) * 0.5
-    uniform.requires_grad_(True)
-    loss_uniform = loss_fn(uniform)
-    loss_random  = loss_fn(torch.rand(2, 3, 64, 64))
-    assert loss_uniform.item() < loss_random.item(), \
-        "Uniform image should have lower RetinexLoss (less illumination variation)"
+    # Recon term is non-trivial: pred == target should give lower recon than random pred
+    pred_exact = target.clone().detach().requires_grad_(True)
+    loss_exact = loss_fn(pred_exact, target)
+    assert loss_exact.item() < loss.item(), \
+        "pred==target should have lower RetinexLoss than random pred"
 
-    # Inspect decomposition
+    # Smoothness: uniform pred should have lower TV term than noisy pred
+    # (fix target to isolate the TV term)
+    uniform_pred = torch.ones(2, 3, 64, 64) * 0.5
+    noisy_pred   = torch.rand(2, 3, 64, 64)
+    same_target  = torch.ones(2, 3, 64, 64) * 0.5  # same as uniform → recon ~0 for both
+    loss_uniform = loss_fn(uniform_pred, same_target)
+    loss_noisy   = loss_fn(noisy_pred,   same_target)
+    assert loss_uniform.item() < loss_noisy.item(), \
+        "Uniform pred should have lower TV loss than random pred"
+
+    # Inspect log-domain reflectances
+    eps = 1e-4
     with torch.no_grad():
-        pool = torch.nn.MaxPool2d(15, stride=1, padding=7)
-        L = pool(pred.detach().max(dim=1, keepdim=True).values).clamp(min=1e-6)
-        R = pred.detach() / L.expand_as(pred.detach())
-        print(f"  L range: [{L.min():.3f}, {L.max():.3f}]  (should be >= pred values, smooth)")
-        print(f"  R range: [{R.min():.3f}, {R.max():.3f}]  (should be <= 1 mostly)")
+        pool  = torch.nn.MaxPool2d(15, stride=1, padding=7)
+        L     = pool(pred.detach().max(dim=1, keepdim=True).values).clamp(min=eps)
+        logR  = torch.log(pred.detach() + eps) - torch.log(L.expand_as(pred.detach()) + eps)
+        print(f"  log(R) range: [{logR.min():.3f}, {logR.max():.3f}]  (centred near 0)")
 
-    print(f"  loss value: {loss.item():.4f}")
+    print(f"  loss value (random pred):  {loss.item():.4f}")
+    print(f"  loss value (pred==target): {loss_exact.item():.6f}  (should be near 0)")
     print(f"  grad norm:  {pred.grad.norm().item():.4f}")
     print("✅ RetinexLoss passed\n")
 
@@ -159,7 +169,7 @@ def test_create_physics_loss_factory():
     gt    = torch.rand(1, 3, 32, 32)
     blurry = torch.rand(1, 3, 32, 32)
 
-    l_r = losses['retinex_loss'](pred)
+    l_r = losses['retinex_loss'](pred, gt)
     l_b = losses['blur_loss'](pred, blurry)
     l_p = losses['phase_loss'](pred, gt)
 

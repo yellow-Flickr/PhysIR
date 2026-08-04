@@ -56,9 +56,12 @@ def main_dataset_lolblur(rank = 1,
         samplers.append(test_sampler)
         test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size_test, shuffle=False,
                                 num_workers=num_workers, pin_memory=True, drop_last=False, sampler=test_sampler)
-    else:        
+    else:
         # #Load the data loaders
-        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size_test, shuffle=True,
+        # shuffle MUST be False: the dataset sorts its file lists, so a non-shuffled loader
+        # makes enumerate() index == a stable image id. Per-image metric logging (and every
+        # paired test built on it) depends on that being identical across runs/machines.
+        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size_test, shuffle=False,
                                 num_workers=num_workers, pin_memory=True, drop_last=False)
         samplers = None
 

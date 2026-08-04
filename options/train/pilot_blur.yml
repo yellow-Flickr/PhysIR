@@ -1,0 +1,89 @@
+#### Stage 1 Pilot — Job D: Baseline + BlurAwareGradientLoss only
+# Purpose: verify blur-gradient loss converges, learnable sigma updates,
+#          and PSNR moves vs Job A baseline.
+#          phase3_start: 1 puts us in phase 3 from epoch 1; retinex=False
+#          means retinex_loss is never created despite phase >= 2 check.
+# Run:     python train.py -p options/train/pilot_blur.yml
+#
+# What to watch:
+#   - blur_sigma in logs: should drift from 1.5 during training (confirms learning)
+#   - loss_blur should sit in the 0.03–0.1 range relative to pixel loss
+#   - if sigma collapses toward 0.3 (the clamp floor) or explodes to 5.0
+#     the learnable PSF isn't finding a stable estimate — note for report
+#   - edge sharpness improvement most visible in dark textured regions
+
+datasets:
+  name: LOLBlur
+  train:
+    low_path:  ./data/datasets/LOLBlur/physir_train/low_blur_noise
+    high_path: ./data/datasets/LOLBlur/physir_train/high_sharp_scaled
+    crop_size: 256
+    batch_size: 4
+    n_workers:  4
+    use_flips:  True
+  val:
+    test_path:       ./data/datasets/LOLBlur/physir_val
+    batch_size_test: 1
+    verbose:         False
+    n_workers:       4
+
+network:
+  name:               DarkIR
+  img_channels:       3
+  width:              32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums:       [1, 2, 3]
+  dec_blk_nums:       [3, 1, 1]
+  dilations:          [1, 4, 9]
+  extra_depth_wise:   True
+
+save:
+  pretrained: null
+  path:       ./models/pilot_blur_latest.pt
+  best:       ./models/bests/pilot_blur_best.pt
+  save_freq:  5
+  eval_freq:  5
+  perceptual_eval_epochs: [10, 30, 50]
+
+pixel_criterion:    l1
+perceptual:         False
+edge:               True
+edge_weight:        0.05
+edge_criterion:     l2
+edge_reduction:     mean
+frequency:          False
+enhance:            True
+enhance_weight:     0.01
+enhance_criterion:  l1
+enhance_reduction:  mean
+
+physics_losses:
+  enabled:       True
+  phase2_start:  9999   # RetinexLoss never activates (retinex: False anyway)
+  phase3_start:  1      # BlurAwareGradientLoss active from epoch 1
+  phase4_start:  9999   # PhaseEnhancedFrequencyLoss never activates
+  retinex:       False
+  blur:          True
+  blur_weight:   0.05   # init_sigma=1.5 and kernel_size=11 set inside BlurAwareGradientLoss
+  phase:         False
+
+train:
+  epochs:        50
+  lr_initial:    0.0002
+  weight_decay: 0.001   # Match Paper decay
+  # weight_decay: 0.00001  betas:         [0.9, 0.9]
+  lr_scheme:     CosineAnnealing
+  eta_min:       0.000001
+  grad_clip:     1.0
+
+wandb:
+  init:    False
+  project: DarkIR-Physics
+  entity:  null
+  name:    pilot_D_blur
+  resume:  False
+  id:      null
+  dir:     ./logs
+
+Resize: False

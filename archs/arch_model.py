@@ -44,14 +44,19 @@ class FreMLP(nn.Module):
 
     def forward(self, x):
         _, _, H, W = x.shape
-        x_freq = torch.fft.rfft2(x, norm='backward')
-        mag = torch.abs(x_freq)
-        pha = torch.angle(x_freq)
+        dev = x.device
+        # torch.angle and complex rfft2 are unsupported on some backends (e.g. MPS).
+        # Route FFT ops through CPU when needed; CUDA/CPU are no-ops (.cpu() on CPU = self).
+        xc = x.cpu() if not x.is_cuda else x
+        x_freq = torch.fft.rfft2(xc, norm='backward')
+        mag = torch.abs(x_freq).to(dev)
+        pha = torch.angle(x_freq).to(dev)
         mag = self.process1(mag)
         real = mag * torch.cos(pha)
         imag = mag * torch.sin(pha)
-        x_out = torch.complex(real, imag)
-        x_out = torch.fft.irfft2(x_out, s=(H, W), norm='backward')
+        x_out = torch.complex(real.cpu() if not real.is_cuda else real,
+                              imag.cpu() if not imag.is_cuda else imag)
+        x_out = torch.fft.irfft2(x_out, s=(H, W), norm='backward').to(dev)
         return x_out
 
 class Branch(nn.Module):

@@ -1,0 +1,73 @@
+#### Stage 1 Pilot — Job A: Baseline (no physics losses)
+# Purpose: establish the reference PSNR ceiling at 50 epochs so Jobs B/C/D
+#          can be judged against it on equal footing.
+# Run:     python train.py -p options/train/pilot_baseline.yml
+
+datasets:
+  name: LOLBlur
+  train:
+    low_path:  ./data/datasets/LOLBlur/physir_train/low_blur_noise
+    high_path: ./data/datasets/LOLBlur/physir_train/high_sharp_scaled
+    crop_size: 256
+    batch_size: 4
+    n_workers:  4
+    use_flips:  True
+  val:
+    test_path:       ./data/datasets/LOLBlur/physir_val
+    batch_size_test: 1
+    verbose:         False
+    n_workers:       4
+
+network:
+  name:               DarkIR
+  img_channels:       3
+  width:              32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums:       [1, 2, 3]
+  dec_blk_nums:       [3, 1, 1]
+  dilations:          [1, 4, 9]
+  extra_depth_wise:   True
+
+save:
+  pretrained: null
+  path:       ./models/pilot_baseline_latest.pt
+  best:       ./models/bests/pilot_baseline_best.pt
+  save_freq:  5
+  eval_freq:  5
+  perceptual_eval_epochs: [10, 30, 50]   # NIQE / NRQM / MUSIQ at these epochs only
+
+pixel_criterion:    l1
+perceptual:         False
+edge:               True
+edge_weight:        0.05
+edge_criterion:     l2
+edge_reduction:     mean
+frequency:          False
+enhance:            True
+enhance_weight:     0.01
+enhance_criterion:  l1
+enhance_reduction:  mean
+
+physics_losses:
+  enabled: False
+
+train:
+  epochs:        50
+  lr_initial:    0.0002
+  weight_decay: 0.001   # Match Paper decay
+  # weight_decay: 0.00001  betas:         [0.9, 0.9]
+  lr_scheme:     CosineAnnealing
+  eta_min:       0.000001
+  grad_clip:     1.0
+
+wandb:
+  init:    False
+  project: DarkIR-Physics
+  entity:  null
+  name:    pilot_A_baseline
+  resume:  False
+  id:      null
+  dir:     ./logs
+
+Resize: False

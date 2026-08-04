@@ -1,0 +1,76 @@
+#### datasets
+datasets:
+  name: Generic_Paired
+  train:
+    low_path: ./data/datasets/LOLBlur/train/low_blur_noise
+    high_path: ./data/datasets/LOLBlur/train/high_sharp_scaled
+    crop_size: 384
+    batch_size: 4
+    n_workers: 4
+    use_flips: True
+  val:
+    test_path: ./data/datasets
+    batch_size_test: 1
+    verbose: True
+    n_workers: 4
+
+#### network — DarkIR-m (width=32, 3.3 M params)
+# Identical to physics_finetune.yml so the only variable is the losses.
+network:
+  name: DarkIR
+  img_channels: 3
+  width: 32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums: [1, 2, 3]
+  dec_blk_nums: [3, 1, 1]
+  dilations: [1, 4, 9]
+  extra_depth_wise: True
+
+#### checkpoints — training from scratch
+save:
+  pretrained: null
+  path: ./models/DarkIR_m_baseline_latest.pt
+  best: ./models/bests/DarkIR_m_baseline_best.pt
+  save_freq: 2
+  eval_freq: 10
+
+#### losses — original DarkIR losses only, no physics losses
+pixel_criterion: l1
+perceptual: False
+edge: True
+edge_weight: 0.05
+edge_criterion: l2
+edge_reduction: mean
+frequency: False
+enhance: True
+enhance_weight: 0.01
+enhance_criterion: l1
+enhance_reduction: mean
+
+#### physics-guided losses — disabled
+physics_losses:
+  enabled: False
+
+#### optimiser / scheduler — identical to physics_finetune.yml
+train:
+  epochs: 300
+  lr_initial: 0.0002
+  weight_decay: 0.001   # Match Paper decay
+  # weight_decay: 0.00001  betas: [0.9, 0.9]
+  lr_scheme: CosineAnnealing
+  eta_min: 0.000001
+  grad_clip: 1.0
+
+#### wandb (optional)
+wandb:
+  init: False
+  project: DarkIR-Physics
+  entity: null
+  name: DarkIR-m_baseline_scratch
+  save_code: False
+  resume: False
+  id: null
+  dir: ./logs
+
+Resize: False

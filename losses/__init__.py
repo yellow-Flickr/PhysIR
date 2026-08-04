@@ -1,4 +1,4 @@
-from .loss import (MSELoss, L1Loss, CharbonnierLoss, SSIM, VGGLoss,
+from .loss import (MSELoss, L1Loss, CharbonnierLoss, SSIM, VGGLoss, LPIPSLoss,
                    EdgeLoss, FrequencyLoss, EnhanceLoss,
                    RetinexLoss, BlurAwareGradientLoss, PhaseEnhancedFrequencyLoss)
 
@@ -23,12 +23,20 @@ def create_loss(opt, rank):
     if rank == 0: print(f"Using pixel loss {opt['pixel_criterion']}")
 
     if opt['perceptual']:
-        perceptual_loss = VGGLoss(loss_weight=opt['perceptual_weight'],
-                                  criterion=opt['perceptual_criterion'],
-                                  reduction=opt['perceptual_reduction']).to(rank)
+        # perceptual_type: 'lpips' faithfully matches DarkIR's L_percep (LPIPS/VGG19);
+        # 'vgg' (default) is the plain VGG19 feature loss.
+        if opt.get('perceptual_type', 'vgg') == 'lpips':
+            perceptual_loss = LPIPSLoss(loss_weight=opt['perceptual_weight'],
+                                        net=opt.get('perceptual_net', 'vgg')).to(rank)
+            if rank == 0: print(f"Using LPIPS perceptual loss (net={opt.get('perceptual_net','vgg')}) "
+                                f"weight {opt['perceptual_weight']}")
+        else:
+            perceptual_loss = VGGLoss(loss_weight=opt['perceptual_weight'],
+                                      criterion=opt['perceptual_criterion'],
+                                      reduction=opt['perceptual_reduction']).to(rank)
+            if rank == 0: print(f"Using VGG perceptual loss {opt['perceptual_criterion']} "
+                                f"weight {opt['perceptual_weight']}")
         losses['perceptual_loss'] = perceptual_loss
-        if rank == 0: print(f"Using perceptual loss {opt['perceptual_criterion']} "
-                            f"weight {opt['perceptual_weight']}")
 
     if opt['edge']:
         edge_loss = EdgeLoss(loss_weight=opt['edge_weight'],

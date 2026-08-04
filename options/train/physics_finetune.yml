@@ -1,0 +1,97 @@
+#### datasets
+datasets:
+  name: Generic_Paired
+  train:
+    # Point these at your local dataset splits.
+    # Expected layout: two flat directories with matching sorted filenames.
+    #   low_path/  — low-light images
+    #   high_path/ — corresponding ground-truth images
+    low_path: ./data/datasets/LOLBlur/train/low_blur_noise
+    high_path: ./data/datasets/LOLBlur/train/high_sharp_scaled
+    crop_size: 384
+    batch_size: 4
+    n_workers: 4
+    use_flips: True
+  val:
+    test_path: ./data/datasets
+    batch_size_test: 1
+    verbose: True
+    n_workers: 4
+
+#### network — DarkIR-m (width=32, 3.3 M params)
+# Must match the baseline config exactly so the only variable is the losses.
+network:
+  name: DarkIR
+  img_channels: 3
+  width: 32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums: [1, 2, 3]
+  dec_blk_nums: [3, 1, 1]
+  dilations: [1, 4, 9]
+  extra_depth_wise: True
+
+#### checkpoints
+# pretrained is intentionally absent — training starts from random initialisation.
+# This is required for a valid causal claim about the physics losses.
+save:
+  pretrained: null
+  path: ./models/DarkIR_m_physics_latest.pt
+  best: ./models/bests/DarkIR_m_physics_best.pt
+  save_freq: 2
+  eval_freq: 10
+
+#### baseline losses (active from epoch 1)
+pixel_criterion: l1
+perceptual: False
+edge: True
+edge_weight: 0.05
+edge_criterion: l2
+edge_reduction: mean
+frequency: False
+enhance: True
+enhance_weight: 0.01
+enhance_criterion: l1
+enhance_reduction: mean
+
+#### physics-guided losses — progressive schedule
+# Phase boundaries mirror the ablation table:
+#   Phase 1  (ep   1–100) : L1 + Edge + Enhance                      [= baseline]
+#   Phase 2  (ep 101–200) : + RetinexLoss
+#   Phase 3  (ep 201–300) : + BlurAwareGradientLoss + PhaseEnhancedFreqLoss  [full]
+# Checkpoints at ep 100, 200, 300 give the ablation rows almost for free.
+physics_losses:
+  enabled: True
+  phase2_start: 101
+  phase3_start: 201     # blur activate in phase 3
+  phase4_start: 251     # phase activate in phase 4 for extra ablation
+  retinex: True
+  retinex_weight: 0.10
+  blur: True
+  blur_weight: 0.05
+  phase: True
+  phase_weight: 0.05
+
+#### optimiser / scheduler
+train:
+  epochs: 300
+  lr_initial: 0.0002
+  weight_decay: 0.001   # Match Paper decay
+  # weight_decay: 0.00001
+  betas: [0.9, 0.9]
+  lr_scheme: CosineAnnealing
+  eta_min: 0.000001
+  grad_clip: 1.0
+
+#### wandb (optional)
+wandb:
+  init: False
+  project: DarkIR-Physics
+  entity: null
+  name: DarkIR-m_physics_scratch
+  save_code: False
+  resume: False
+  id: null
+  dir: ./logs
+
+Resize: False
