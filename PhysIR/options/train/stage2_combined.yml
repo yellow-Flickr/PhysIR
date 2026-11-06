@@ -1,0 +1,116 @@
+#### Stage 2 — Combined: all three physics losses active simultaneously
+# Purpose: verify losses combine without interference and find a PSNR
+#          ceiling above best solo pilot (C: 24.94 dB).
+#          Weights are pilot-derived starting points — weight sweep follows.
+#
+# Phase gating: phase4_start: 1 puts us at phase=4 from epoch 1.
+#   phase >= 2 → RetinexLoss fires   ✅
+#   phase >= 3 → BlurGrad fires      ✅
+#   phase >= 4 → PhaseFreq fires     ✅
+#   All three active concurrently from epoch 1.
+#
+# Run: torchrun --nproc_per_node=2 train.py -p options/train/stage2_combined.yml
+
+datasets:
+  name: LOLBlur
+  train:
+    low_path:  ./data/datasets/LOLBlur/physir_train/low_blur_noise
+    high_path: ./data/datasets/LOLBlur/physir_train/high_sharp_scaled
+    crop_size: 256
+    batch_size: 4
+    n_workers:  4
+    use_flips:  True
+  val:
+    test_path:       ./data/datasets/LOLBlur/physir_val
+    batch_size_test: 1
+    verbose:         False
+    n_workers:       4
+
+# Generalization set (out-of-distribution) — tracked separately every gen_eval_freq
+# epochs, never feeds best-checkpoint selection. LOLv2 test split per the guide's
+# "free win" metric. Remove this block to disable gen eval.
+#
+# The All_LOL reader expects test_path to be a PARENT dir containing:
+#   LOL-v2/Real_captured/test/{Low,Normal}   → logged as 'lolv2'
+#   LOL-v2/Synthetic/test/{Low,Normal}       → logged as 'lolv2_synth'
+#   LOLBlur/test/{low_blur_noise,high_sharp_scaled}  → logged as 'lolblur' (skip to avoid)
+# Missing sub-sets are skipped gracefully. Point this at a dir holding ONLY LOL-v2/
+# if you want a pure generalization signal (no in-distribution LOLBlur/test).
+datasets_gen:
+  name: All_LOL
+  train:
+    n_workers: 2
+    verbose:   False
+  val:
+    test_path:       ./data/datasets/generalization   # parent dir with LOL-v2/
+    batch_size_test: 1
+    verbose:         False
+    n_workers:       2
+
+network:
+  name:               DarkIR
+  img_channels:       3
+  width:              32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums:       [1, 2, 3]
+  dec_blk_nums:       [3, 1, 1]
+  dilations:          [1, 4, 9]
+  extra_depth_wise:   True
+
+save:
+  pretrained: null
+  path:       ./models/stage2_combined_latest.pt
+  best:       ./models/bests/stage2_combined_best.pt
+  save_freq:  5
+  eval_freq:  5
+  gen_eval_freq: 10      # LOLv2 generalization eval cadence
+  perceptual_eval_epochs: [10, 20, 35]
+
+pixel_criterion:    l1
+perceptual:         False
+edge:               True
+edge_weight:        0.05
+edge_criterion:     l2
+edge_reduction:     mean
+frequency:          False
+enhance:            True
+enhance_weight:     0.01
+enhance_criterion:  l1
+enhance_reduction:  mean
+
+physics_losses:
+  enabled:        True
+  phase2_start:   9999   # unused — phase4_start fires all gates
+  phase3_start:   9999   # unused
+  phase4_start:   1      # phase=4 from epoch 1; all three losses active
+  # Pre-normalized weights (tempered). Pilot ep50 contributions vs base loss:
+  #   retinex@0.10 = 28% base, blur@0.05 = 13% base, phase@0.05 = 383% base (!).
+  # Phase was dominant AND best (+0.70 dB), so we keep it as the lead physics loss
+  # but pull it from ~4x base to ~1.5x base, and raise retinex/blur to ~0.5x base
+  # so they contribute rather than drowning. Stage 3 sweep refines from here.
+  retinex:        True
+  retinex_weight: 0.18   # 0.10 -> 0.18  (~0.5x base)
+  blur:           True
+  blur_weight:    0.17   # 0.05 -> 0.17  (~0.5x base; ~ the w015 probe level)
+  phase:          True
+  phase_weight:   0.02   # 0.05 -> 0.02  (~1.5x base; stays the lead loss)
+
+train:
+  epochs:        35
+  lr_initial:    0.00028
+  weight_decay:  0.001
+  lr_scheme:     CosineAnnealing
+  eta_min:       0.000001
+  grad_clip:     1.0
+
+wandb:
+  init:    False
+  project: DarkIR-Physics
+  entity:  null
+  name:    stage2_combined
+  resume:  False
+  id:      null
+  dir:     ./logs
+
+Resize: False

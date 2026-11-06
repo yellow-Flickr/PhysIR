@@ -1,0 +1,87 @@
+#### Stage 1 Pilot — Job C: Baseline + PhaseEnhancedFrequencyLoss only
+# Purpose: verify frequency/phase loss converges and moves PSNR vs Job A.
+#          phase4_start: 1 pushes phase directly to 4 from epoch 1; since
+#          retinex=False and blur=False those losses are never created or called.
+# Run:     python train.py -p options/train/pilot_freq.yml
+#
+# What to watch:
+#   - loss_phase_freq should be in the 0.05–0.3 range (higher than pixel initially)
+#   - high_pass_ratio=0.1 suppresses DC; if loss stays very high check mask logic
+#   - MPS note: rfft2 is CPU-routed automatically — no action needed
+#   - val PSNR: expect fine-detail improvement; modest PSNR delta is normal for freq losses
+
+datasets:
+  name: LOLBlur
+  train:
+    low_path:  ./data/datasets/LOLBlur/physir_train/low_blur_noise
+    high_path: ./data/datasets/LOLBlur/physir_train/high_sharp_scaled
+    crop_size: 256
+    batch_size: 4
+    n_workers:  4
+    use_flips:  True
+  val:
+    test_path:       ./data/datasets/LOLBlur/physir_val
+    batch_size_test: 1
+    verbose:         False
+    n_workers:       4
+
+network:
+  name:               DarkIR
+  img_channels:       3
+  width:              32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums:       [1, 2, 3]
+  dec_blk_nums:       [3, 1, 1]
+  dilations:          [1, 4, 9]
+  extra_depth_wise:   True
+
+save:
+  pretrained: null
+  path:       ./models/pilot_freq_latest.pt
+  best:       ./models/bests/pilot_freq_best.pt
+  save_freq:  5
+  eval_freq:  5
+  perceptual_eval_epochs: [10, 30, 50]
+
+pixel_criterion:    l1
+perceptual:         False
+edge:               True
+edge_weight:        0.05
+edge_criterion:     l2
+edge_reduction:     mean
+frequency:          False
+enhance:            True
+enhance_weight:     0.01
+enhance_criterion:  l1
+enhance_reduction:  mean
+
+physics_losses:
+  enabled:       True
+  phase2_start:  9999   # RetinexLoss never activates
+  phase3_start:  9999   # BlurAwareGradientLoss never activates
+  phase4_start:  1      # PhaseEnhancedFrequencyLoss active from epoch 1
+  retinex:       False
+  blur:          False
+  phase:         True
+  phase_weight:  0.05   # amp_weight and phase_weight set inside PhaseEnhancedFrequencyLoss
+
+train:
+  epochs:        50
+  lr_initial:    0.0002
+  weight_decay: 0.001   # Match Paper decay
+  # weight_decay: 0.00001  betas:         [0.9, 0.9]
+  lr_scheme:     CosineAnnealing
+  eta_min:       0.000001
+  grad_clip:     1.0
+
+wandb:
+  init:    False
+  project: DarkIR-Physics
+  entity:  null
+  name:    pilot_C_freq
+  resume:  False
+  id:      null
+  dir:     ./logs
+
+Resize: False

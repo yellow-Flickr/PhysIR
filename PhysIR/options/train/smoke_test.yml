@@ -1,0 +1,72 @@
+datasets:
+  train:
+    # Option A — repo assets (4 pairs)
+    # low_path:  ./assets/qualis/inputs
+    # high_path: ./assets/qualis/results
+
+    # Option B — LOLv2-real train split (689 pairs)
+    low_path:  ./data/datasets/LOL-v2/Real_captured/train/Low
+    high_path: ./data/datasets/LOL-v2/Real_captured/train/Normal
+
+    crop_size: 128    # smaller patches = faster iterations
+    batch_size: 1     # 1 keeps memory low; use 2 if you have headroom
+    n_workers: 0      # 0 avoids multiprocessing issues during debugging
+    use_flips: True
+  val:
+    test_path: ./data/datasets    # leave as-is; val skipped if path is missing
+    batch_size_test: 1
+    verbose: False
+    n_workers: 0
+
+network:
+  name: DarkIR
+  img_channels: 3
+  width: 32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums: [1, 2, 3]
+  dec_blk_nums: [3, 1, 1]
+  dilations: [1, 4, 9]
+  extra_depth_wise: True
+
+save:
+  pretrained: null
+  path: ./models/smoke_latest.pt
+  best: ./models/bests/smoke_best.pt
+  save_freq: 2      # checkpoint every 2 epochs
+  eval_freq: 999    # disable val eval (set high so it never triggers)
+
+pixel_criterion: l1
+perceptual: False
+edge: True
+edge_weight: 0.05
+edge_criterion: l2
+edge_reduction: mean
+frequency: False
+enhance: False       # EnhanceLoss uses VGG — skip for a fast smoke test
+
+physics_losses:
+  enabled: True
+  phase2_start: 3   # compress the schedule so all 4 phases are tested in 10 epochs
+  phase3_start: 5
+  phase4_start: 7
+  retinex: True
+  retinex_weight: 0.10
+  blur: True
+  blur_weight: 0.05
+  phase: True
+  phase_weight: 0.05
+
+train:
+  epochs: 10        # 10 epochs covers all four phases with the compressed schedule
+  lr_initial: 0.0002
+  weight_decay: 0.00001
+  betas: [0.9, 0.9]
+  lr_scheme: CosineAnnealing
+  eta_min: 0.000001
+  grad_clip: 1.0
+
+wandb:
+  init: False
+
+Resize: False

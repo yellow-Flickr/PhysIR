@@ -1,0 +1,78 @@
+#### Stage 1 Diagnostic — Job D-noedge: BlurAwareGradientLoss only, Edge loss DISABLED
+# Purpose: test whether Edge loss was subsuming BlurAwareGradientLoss.
+#          If PSNR improves vs pilot_blur.yml, Edge loss was responsible for
+#          the spatial deblurring — BlurGrad is redundant with it.
+#          If still marginal, DarkIR's FreMLP encoder itself saturates spatial deblurring.
+# Run:     python train.py -p options/train/pilot_blur_noedge.yml
+
+datasets:
+  name: LOLBlur
+  train:
+    low_path:  ./data/datasets/LOLBlur/physir_train/low_blur_noise
+    high_path: ./data/datasets/LOLBlur/physir_train/high_sharp_scaled
+    crop_size: 256
+    batch_size: 4
+    n_workers:  4
+    use_flips:  True
+  val:
+    test_path:       ./data/datasets/LOLBlur/physir_val
+    batch_size_test: 1
+    verbose:         False
+    n_workers:       4
+
+network:
+  name:               DarkIR
+  img_channels:       3
+  width:              32
+  middle_blk_num_enc: 2
+  middle_blk_num_dec: 2
+  enc_blk_nums:       [1, 2, 3]
+  dec_blk_nums:       [3, 1, 1]
+  dilations:          [1, 4, 9]
+  extra_depth_wise:   True
+
+save:
+  pretrained: null
+  path:       ./models/pilot_blur_noedge_latest.pt
+  best:       ./models/bests/pilot_blur_noedge_best.pt
+  save_freq:  5
+  eval_freq:  5
+  perceptual_eval_epochs: [10, 30, 50]
+
+pixel_criterion:    l1
+perceptual:         False
+edge:               False     # DISABLED — key diagnostic change
+frequency:          False
+enhance:            True
+enhance_weight:     0.01
+enhance_criterion:  l1
+enhance_reduction:  mean
+
+physics_losses:
+  enabled:       True
+  phase2_start:  9999   # RetinexLoss never activates
+  phase3_start:  1      # BlurAwareGradientLoss active from epoch 1
+  phase4_start:  9999   # PhaseEnhancedFrequencyLoss never activates
+  retinex:       False
+  blur:          True
+  blur_weight:   0.05   # original weight — no masking from Edge now
+  phase:         False
+
+train:
+  epochs:        50
+  lr_initial:    0.00028
+  weight_decay:  0.001
+  lr_scheme:     CosineAnnealing
+  eta_min:       0.000001
+  grad_clip:     1.0
+
+wandb:
+  init:    False
+  project: DarkIR-Physics
+  entity:  null
+  name:    pilot_D_blur_noedge
+  resume:  False
+  id:      null
+  dir:     ./logs
+
+Resize: False

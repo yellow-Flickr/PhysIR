@@ -137,6 +137,29 @@ def measure(target, mode):
         }
 
 
+def measure_grad(target, mode, pred=None):
+    """Gradient norms w.r.t. the prediction, for the two halves of L_freq and the L1 anchor.
+
+    The loss VALUE of L_freq is dominated by its amplitude half, but the training signal is
+    its gradient, and the phase half's unit-phasor gradient scales with 1/|F| of the
+    prediction. Its size therefore depends on how much high-frequency energy (detail or
+    noise) the prediction carries: on synthetic pairs the amplitude share of the gradient
+    moves from ~2 % (clean blur) to ~50 % (blur + noise). Use --pred with real model outputs;
+    synthetic predictions cannot settle this."""
+    if pred is None:
+        pred, _ = make_pair(target, mode)
+    out = {}
+    halves = {'amp': PhaseEnhancedFrequencyLoss(weight=1.0, amp_weight=0.5, phase_weight=0.0),
+              'phase_half': PhaseEnhancedFrequencyLoss(weight=1.0, amp_weight=0.0, phase_weight=0.5),
+              'freq': PhaseEnhancedFrequencyLoss(weight=1.0)}
+    for name, fn in list(halves.items()) + [('base', None)]:
+        p = pred.clone().requires_grad_(True)
+        loss = F.l1_loss(p, target) if fn is None else fn(p, target)
+        g, = torch.autograd.grad(loss, p)
+        out[name] = g.norm().item()
+    return out
+
+
 def center_crop(img, size):
     _, _, H, W = img.shape
     top, left = (H - size) // 2, (W - size) // 2
@@ -155,7 +178,15 @@ def main():
                          'sub-crop (avoids the largest crop matching the generation grid '
                          'exactly, which would bias its FFT). Default: 2x max crop.')
     ap.add_argument('--seed', type=int, default=42)
+    ap.add_argument('--grad', action='store_true',
+                    help='also compare GRADIENT norms across crops (amplitude vs phase share of '
+                         'L_freq, and weighted L_freq / L1 gradient ratio at 0.20 vs 0.14)')
+    ap.add_argument('--pred', default=None,
+                    help='with --data and --grad: dir of model outputs whose sorted file list '
+                         'aligns with --data (same names). Replaces the synthetic prediction.')
     args = ap.parse_args()
+    if args.pred and not (args.data and args.grad):
+        raise SystemExit('--pred needs --data and --grad')
 
     torch.manual_seed(args.seed)
     gen = torch.Generator().manual_seed(args.seed)
@@ -242,6 +273,37 @@ def main():
         print(f'  With the rescaled weight it should return to ≈ {REF_256["phase"]/REF_256["base"]:.3f}.')
         print('\n  Confirm against a real 1-epoch run at 384: read loss_base / loss_phase_freq'
               '\n  from .metrics/<run>/training_log.csv at epoch 1.')
+
+    if args.grad:
+        preds = [None] * len(imgs)
+        if args.pred:
+            preds = load_images(args.pred, args.n, big)
+            if len(preds) != len(imgs) or any(p.shape != t.shape for p, t in zip(preds, imgs)):
+                raise SystemExit('--pred images do not align with --data (count or size differs)')
+            print(f'\nGradient check uses real predictions from {args.pred}')
+        else:
+            print('\nGradient check uses SYNTHETIC predictions — indicative only (see measure_grad).')
+        grads = {}
+        for c in args.crops:
+            acc = {}
+            for img, pr in zip(imgs, preds):
+                pr = None if pr is None else center_crop(pr, c)
+                for k, v in measure_grad(center_crop(img, c), args.mode, pr).items():
+                    acc[k] = acc.get(k, 0.0) + v / len(imgs)
+            grads[c] = acc
+
+        print('\n=== GRADIENT CHECK (norm of d loss / d prediction, weights = 1.0) ===')
+        print(f'{"crop":>6s}{"|g amp|":>12s}{"|g phase|":>12s}{"amp share":>11s}{"|g L1|":>12s}')
+        for c in args.crops:
+            g = grads[c]
+            share = g['amp'] / (g['amp'] + g['phase_half'])
+            print(f'{c:6d}{g["amp"]:12.4e}{g["phase_half"]:12.4e}{share:11.2%}{g["base"]:12.4e}')
+        if 256 in grads and 384 in grads:
+            w256, w384 = REF_WEIGHTS_256['phase'], 0.14
+            r256 = w256 * grads[256]['freq'] / grads[256]['base']
+            r384 = w384 * grads[384]['freq'] / grads[384]['base']
+            print(f'\n  weighted L_freq / L1 gradient ratio: 256 @ {w256} = {r256:.4f}, '
+                  f'384 @ {w384} = {r384:.4f}  (384/256 = {r384 / r256:.3f}; 1.000 = transferred)')
 
 
 if __name__ == '__main__':

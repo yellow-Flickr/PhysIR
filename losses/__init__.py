@@ -83,12 +83,17 @@ def create_physics_loss(opt, device):
         losses['retinex_loss'] = rl
 
     if opt.get('blur', True):
-        bl = BlurAwareGradientLoss(weight=opt.get('blur_weight', 0.05)).to(device)
+        bl = BlurAwareGradientLoss(weight=opt.get('blur_weight', 0.05),
+                                   normalize=opt.get('blur_normalize', False)).to(device)
         losses['blur_loss'] = bl
         extra_params += list(bl.parameters())  # includes learnable sigma
 
     if opt.get('phase', True):
-        pl = PhaseEnhancedFrequencyLoss(weight=opt.get('phase_weight', 0.05)).to(device)
+        # freq_amp_weight / freq_phase_weight split the term into its two halves. The 0.5/0.5
+        # defaults are the loss's own, so every config without these keys is unchanged.
+        pl = PhaseEnhancedFrequencyLoss(weight=opt.get('phase_weight', 0.05),
+                                        amp_weight=opt.get('freq_amp_weight', 0.5),
+                                        phase_weight=opt.get('freq_phase_weight', 0.5)).to(device)
         losses['phase_loss'] = pl
 
     return losses, extra_params
