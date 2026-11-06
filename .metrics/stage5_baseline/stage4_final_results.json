@@ -1,0 +1,47 @@
+{
+  "run": "stage5_baseline",
+  "best_epoch": 300,
+  "weights": "ema",
+  "config_weights": {
+    "phase": 0.14,
+    "retinex": 0.18,
+    "blur": false,
+    "crop": 384,
+    "batch": 32
+  },
+  "results": {
+    "LOLBlur_test": {
+      "psnr": 26.674915201734233,
+      "ssim": 0.8663528610931502,
+      "lpips": 0.2375524541321728
+    },
+    "LOLv2_lolv2": {
+      "psnr": 19.793960379520414,
+      "ssim": 0.7846301180124283,
+      "lpips": 0.3587725147604942
+    },
+    "LOLv2_lolv2_synth": {
+      "psnr": 18.36268297923842,
+      "ssim": 0.7988679951429367,
+      "lpips": 0.2419009017944336
+    },
+    "RealLOLBlur_noref": {
+      "niqe": 5.538488051804666,
+      "nrqm": 4.536226225591794,
+      "musiq": 47.89578534755469
+    },
+    "LSRW_Nikon": {
+      "psnr": 16.34576130787196,
+      "ssim": 0.47660253643989564,
+      "lpips": 0.34057414457201957,
+      "n": 20
+    },
+    "LSRW_Huawei": {
+      "psnr": 18.93991157475059,
+      "ssim": 0.5590864797433217,
+      "lpips": 0.44721799294153847,
+      "n": 30
+    }
+  },
+  "per_image_csv": "/content/drive/MyDrive/PhysIR/stage5_baseline/per_image/per_image_stage5_baseline.csv"
+}

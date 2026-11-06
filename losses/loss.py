@@ -351,7 +351,7 @@ class VGG19(torch.nn.Module):
 class VGGLoss(nn.Module):
     def __init__(self, loss_weight=1.0, criterion = 'l1', reduction='mean'):
         super(VGGLoss, self).__init__()
-        self.vgg = VGG19().cuda()
+        self.vgg = VGG19()
         if reduction not in ['none', 'mean', 'sum']:
             raise ValueError(f'Unsupported reduction mode: {reduction}. '
                              f'Supported ones are: {_reduction_modes}')
@@ -526,4 +526,125 @@ class EnhanceLoss(nn.Module):
     def forward(self, gt, enhanced, scale_factor = 16):
         gt_low_res = F.interpolate(gt, scale_factor=scale_factor, mode = 'nearest')
         return self.vgg19(gt_low_res, enhanced) + self.loss_weight * self.criterion(gt_low_res, enhanced)
-    
+
+
+# ── Physics-guided loss functions ────────────────────────────────────────────
+
+class RetinexLoss(nn.Module):
+    """
+    Physics-guided Retinex decomposition regulariser.
+
+    Illumination L is estimated via max-pool over the max-channel image.
+    Two terms: TV smoothness on L, and Retinex reconstruction consistency.
+    Training-only — zero inference overhead.
+    """
+
+    def __init__(self, weight=0.1, pool_kernel=15, smooth_weight=0.5, recon_weight=0.5):
+        super().__init__()
+        self.weight        = weight
+        self.smooth_weight = smooth_weight
+        self.recon_weight  = recon_weight
+        pad = pool_kernel // 2
+        self.pool = nn.MaxPool2d(pool_kernel, stride=1, padding=pad)
+
+    def forward(self, x_pred):
+        L  = self.pool(x_pred.max(dim=1, keepdim=True).values).clamp(min=1e-6)
+        L3 = L.expand_as(x_pred)
+        R  = x_pred / L3
+        smooth_h  = torch.abs(L[:, :, 1:, :] - L[:, :, :-1, :]).mean()
+        smooth_w  = torch.abs(L[:, :, :, 1:] - L[:, :, :, :-1]).mean()
+        recon     = F.l1_loss(R * L3, x_pred)
+        return self.weight * (self.smooth_weight * (smooth_h + smooth_w) + self.recon_weight * recon)
+
+
+class BlurAwareGradientLoss(nn.Module):
+    """
+    Blur-aware gradient loss with a learnable Gaussian PSF.
+
+    Enforces: ||grad(x_pred ⊗ k_est) - grad(y_input)||_1
+    PSF sigma is a trainable parameter updated alongside model weights.
+    Training-only — zero inference overhead.
+    """
+
+    def __init__(self, weight=0.05, init_sigma=1.5, kernel_size=11):
+        super().__init__()
+        self.weight      = weight
+        self.kernel_size = kernel_size
+        self.log_sigma   = nn.Parameter(torch.tensor(float(init_sigma)).log())
+        sx = torch.tensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]])
+        sy = torch.tensor([[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]])
+        self.register_buffer('sobel_x', sx.view(1, 1, 3, 3))
+        self.register_buffer('sobel_y', sy.view(1, 1, 3, 3))
+
+    def _gaussian_kernel(self, device):
+        sigma  = self.log_sigma.exp().clamp(0.3, 5.0)
+        k      = self.kernel_size
+        coords = torch.arange(k, dtype=torch.float32, device=device) - k // 2
+        g1d    = torch.exp(-0.5 * (coords / sigma) ** 2)
+        g2d    = g1d.unsqueeze(0) * g1d.unsqueeze(1)
+        return (g2d / g2d.sum()).view(1, 1, k, k)
+
+    def _sobel(self, x):
+        B, C, H, W = x.shape
+        xf = x.view(B * C, 1, H, W)
+        gx = F.conv2d(xf, self.sobel_x, padding=1)
+        gy = F.conv2d(xf, self.sobel_y, padding=1)
+        return (gx ** 2 + gy ** 2 + 1e-8).sqrt().view(B, C, H, W)
+
+    def _blur(self, x):
+        B, C, H, W = x.shape
+        k = self._gaussian_kernel(x.device).expand(C, 1, self.kernel_size, self.kernel_size)
+        return F.conv2d(x, k, padding=self.kernel_size // 2, groups=C)
+
+    def forward(self, x_pred, y_input):
+        return self.weight * F.l1_loss(self._sobel(self._blur(x_pred)), self._sobel(y_input))
+
+
+class PhaseEnhancedFrequencyLoss(nn.Module):
+    """
+    Extends amplitude-only frequency loss with explicit phase-gradient supervision.
+
+    A high-pass mask suppresses DC/near-DC where phase is unreliable.
+    Phase is represented as unit complex vectors to avoid 2π wrapping issues.
+    Training-only — zero inference overhead.
+    """
+
+    def __init__(self, weight=0.05, amp_weight=0.5, phase_weight=0.5, high_pass_ratio=0.1):
+        super().__init__()
+        self.weight          = weight
+        self.amp_weight      = amp_weight
+        self.phase_weight    = phase_weight
+        self.high_pass_ratio = high_pass_ratio
+
+    @staticmethod
+    def _phase_unit(fft_tensor):
+        return fft_tensor / fft_tensor.abs().clamp(min=1e-8)
+
+    @staticmethod
+    def _freq_grad(p):
+        return p[:, :, 1:, :] - p[:, :, :-1, :], p[:, :, :, 1:] - p[:, :, :, :-1]
+
+    def _high_pass_mask(self, shape, device):
+        _, _, H, Wr = shape
+        mask = torch.ones(1, 1, H, Wr, device=device)
+        rh   = max(1, int(H  * self.high_pass_ratio))
+        rw   = max(1, int(Wr * self.high_pass_ratio))
+        mask[:, :, :rh, :rw] = 0.0
+        return mask
+
+    def forward(self, pred, target):
+        pf   = torch.fft.rfft2(pred,   norm='backward')
+        tf   = torch.fft.rfft2(target, norm='backward')
+        mask = self._high_pass_mask(pf.shape, pf.device)
+
+        amp_loss = F.l1_loss(pf.abs() * mask, tf.abs() * mask)
+
+        pp, tp   = self._phase_unit(pf), self._phase_unit(tf)
+        pdh, pdw = self._freq_grad(pp)
+        tdh, tdw = self._freq_grad(tp)
+        phase_loss = (
+            F.l1_loss(pdh.real * mask[:, :, 1:, :], tdh.real * mask[:, :, 1:, :]) +
+            F.l1_loss(pdw.real * mask[:, :, :, 1:], tdw.real * mask[:, :, :, 1:])
+        )
+        return self.weight * (self.amp_weight * amp_loss + self.phase_weight * phase_loss)
+

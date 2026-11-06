@@ -1,0 +1,101 @@
+{
+  "Resize": false,
+  "datasets": {
+    "name": "LOLBlur",
+    "train": {
+      "batch_size": 4,
+      "crop_size": 256,
+      "high_path": "/kaggle/working/LOLBlur_split/physir_train/high_sharp_scaled",
+      "low_path": "/kaggle/working/LOLBlur_split/physir_train/low_blur_noise",
+      "n_workers": 4,
+      "use_flips": true
+    },
+    "val": {
+      "batch_size_test": 1,
+      "n_workers": 4,
+      "test_path": "/kaggle/working/LOLBlur_split/physir_val",
+      "verbose": false
+    }
+  },
+  "edge": true,
+  "edge_criterion": "l2",
+  "edge_reduction": "mean",
+  "edge_weight": 0.05,
+  "enhance": true,
+  "enhance_criterion": "l1",
+  "enhance_reduction": "mean",
+  "enhance_weight": 0.01,
+  "frequency": false,
+  "network": {
+    "dec_blk_nums": [
+      3,
+      1,
+      1
+    ],
+    "dilations": [
+      1,
+      4,
+      9
+    ],
+    "enc_blk_nums": [
+      1,
+      2,
+      3
+    ],
+    "extra_depth_wise": true,
+    "img_channels": 3,
+    "middle_blk_num_dec": 2,
+    "middle_blk_num_enc": 2,
+    "name": "DarkIR",
+    "width": 32
+  },
+  "perceptual": false,
+  "perceptual_criterion": "l1",
+  "perceptual_net": "vgg",
+  "perceptual_reduction": "mean",
+  "perceptual_type": "lpips",
+  "perceptual_weight": 0.01,
+  "physics_losses": {
+    "blur": false,
+    "blur_weight": 0.0,
+    "enabled": true,
+    "phase": false,
+    "phase2_start": 9999,
+    "phase3_start": 9999,
+    "phase4_start": 1,
+    "phase_weight": 0.0,
+    "retinex": true,
+    "retinex_weight": 0.18
+  },
+  "pixel_criterion": "l1",
+  "save": {
+    "best": "/kaggle/working/abl_retinex_best.pt",
+    "eval_freq": 10,
+    "path": "/kaggle/working/abl_retinex_latest.pt",
+    "perceptual_eval_epochs": [],
+    "pretrained": null,
+    "save_freq": 2,
+    "snapshot_epochs": [
+      150
+    ]
+  },
+  "seed": 42,
+  "train": {
+    "ema": {
+      "decay": 0.9999,
+      "enabled": true,
+      "warmup": 2000
+    },
+    "epochs": 200,
+    "eta_min": 1e-06,
+    "grad_clip": 1.0,
+    "lr_initial": 0.00028,
+    "lr_scheme": "CosineAnnealing",
+    "time_budget_h": 0,
+    "weight_decay": 0.001
+  },
+  "wandb": {
+    "init": false,
+    "name": "abl_retinex"
+  }
+}

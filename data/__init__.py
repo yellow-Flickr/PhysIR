@@ -1,3 +1,4 @@
+from .dataset_reader.dataset_train import create_train_loader
 from .dataset_reader.dataset_LOLBlur import main_dataset_lolblur
 from .dataset_reader.dataset_all_LOL import main_dataset_all_lol
 from .dataset_reader.dataset_real_LSRW import main_dataset_real_LSRW
@@ -101,4 +102,19 @@ def create_test_data(rank, world_size, opt):
     return test_loader, samplers
 
 
-__all__ = ['create_test_data']
+def create_train_data(opt):
+    '''
+    Creates a training DataLoader from the datasets.train config block.
+    opt: dict from yaml key datasets.train
+    '''
+    return create_train_loader(
+        low_dir=opt['low_path'],
+        high_dir=opt['high_path'],
+        crop_size=opt.get('crop_size', 256),
+        batch_size=opt.get('batch_size', 4),
+        num_workers=opt.get('n_workers', 4),
+        use_flips=opt.get('use_flips', True),
+    )
+
+
+__all__ = ['create_test_data', 'create_train_data']

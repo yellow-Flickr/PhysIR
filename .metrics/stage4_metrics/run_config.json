@@ -1,0 +1,123 @@
+{
+  "Resize": false,
+  "datasets": {
+    "name": "LOLBlur",
+    "train": {
+      "batch_size": 32,
+      "crop_size": 384,
+      "high_path": "/content/LOLBlur_split/physir_train/high_sharp_scaled",
+      "low_path": "/content/LOLBlur_split/physir_train/low_blur_noise",
+      "n_workers": 8,
+      "use_flips": true
+    },
+    "val": {
+      "batch_size_test": 1,
+      "n_workers": 4,
+      "test_path": "/content/LOLBlur_split/physir_val",
+      "verbose": false
+    }
+  },
+  "datasets_gen": {
+    "name": "All_LOL",
+    "train": {
+      "n_workers": 2,
+      "verbose": false
+    },
+    "val": {
+      "batch_size_test": 1,
+      "n_workers": 2,
+      "test_path": "/content/LOLv2_gen",
+      "verbose": false
+    }
+  },
+  "edge": true,
+  "edge_criterion": "l2",
+  "edge_reduction": "mean",
+  "edge_weight": 0.05,
+  "enhance": true,
+  "enhance_criterion": "l1",
+  "enhance_reduction": "mean",
+  "enhance_weight": 0.01,
+  "frequency": false,
+  "network": {
+    "dec_blk_nums": [
+      3,
+      1,
+      1
+    ],
+    "dilations": [
+      1,
+      4,
+      9
+    ],
+    "enc_blk_nums": [
+      1,
+      2,
+      3
+    ],
+    "extra_depth_wise": true,
+    "img_channels": 3,
+    "middle_blk_num_dec": 2,
+    "middle_blk_num_enc": 2,
+    "name": "DarkIR",
+    "width": 32
+  },
+  "perceptual": false,
+  "physics_losses": {
+    "blur": false,
+    "blur_weight": 0.02,
+    "enabled": true,
+    "phase": true,
+    "phase2_start": 9999,
+    "phase3_start": 9999,
+    "phase4_start": 1,
+    "phase_weight": 0.14,
+    "retinex": true,
+    "retinex_weight": 0.18
+  },
+  "pixel_criterion": "l1",
+  "save": {
+    "best": "/content/drive/MyDrive/PhysIR/stage4/checkpoints/stage4_physir_final_best.pt",
+    "eval_freq": 10,
+    "gen_eval_freq": 20,
+    "path": "/content/drive/MyDrive/PhysIR/stage4/checkpoints/stage4_physir_final_latest.pt",
+    "perceptual_eval_epochs": [
+      1,
+      50,
+      150,
+      300
+    ],
+    "pretrained": null,
+    "save_freq": 5
+  },
+  "train": {
+    "ema": {
+      "decay": 0.9999,
+      "enabled": true,
+      "warmup": 2000
+    },
+    "epochs": 300,
+    "eta_min": 1e-06,
+    "grad_clip": 1.0,
+    "lr_initial": 0.0005,
+    "lr_scheme": "CosineAnnealing",
+    "weight_decay": 0.001
+  },
+  "visual_samples": {
+    "enabled": true,
+    "epochs": [
+      1,
+      25,
+      50,
+      100,
+      150,
+      200,
+      300
+    ],
+    "num_samples": 6
+  },
+  "wandb": {
+    "init": false,
+    "name": "stage4_physir_final"
+  }
+}

@@ -1,0 +1,193 @@
+Research Questions for the Physics-Guided LLE Proposal
+=======================================================
+
+Research questions to add to "Physics-Guided Loss Functions for Low-Light Image Restoration"
+
+
+SUGGESTED PLACEMENT
+-------------------
+
+Insert a "Research Questions" section between Section 2 (Problem Statement) and
+Section 3 (Research Objectives). Research questions frame what the study seeks to
+answer; objectives then state what concrete steps will be taken to answer them.
+This ordering gives the reader a clear logical arc:
+
+    gap --> questions --> objectives --> methodology
+
+
+================================================================================
+PRIMARY RESEARCH QUESTION
+================================================================================
+
+RQ1: To what extent can physics-guided loss functions -- encoding Retinex
+decomposition, blur formation physics, and Fourier-domain phase structure --
+improve the quality, generalization, and physical plausibility of deep
+learning-based low-light image restoration, without requiring architectural
+modifications?
+
+Rationale: This overarching question captures the central hypothesis: that
+explicit physics-based training constraints can meaningfully improve a
+state-of-the-art model (DarkIR) trained with generic losses. The "without
+architectural modifications" qualifier is important -- it scopes the contribution
+to loss design rather than network design, which is the proposal's distinct angle.
+
+
+================================================================================
+SUB-RESEARCH QUESTIONS
+================================================================================
+
+RQ2 -- Retinex Decomposition Regularization
+--------------------------------------------
+
+Does enforcing illumination smoothness and reconstruction consistency
+(I = R . L) through differentiable loss terms yield more physically plausible
+illumination-reflectance decompositions and measurably better restoration
+quality than training with generic pixel-wise and perceptual losses alone?
+
+Testable via: Ablation experiment 1 (Baseline vs. +Retinex). Measured by
+PSNR/SSIM on LOLBlur test, plus qualitative inspection of extracted
+illumination maps for smoothness and absence of high-frequency artifacts.
+
+
+RQ3 -- Blur-Aware Gradient Consistency
+---------------------------------------
+
+Does enforcing gradient consistency under re-blurring -- requiring that the
+deblurred output, when convolved with an estimated PSF, matches the gradient
+statistics of the input -- reduce unnatural sharpening artifacts and improve
+deblurring fidelity compared to edge-only supervision?
+
+Testable via: Ablation experiment 2 (Baseline vs. +Blur). Measured by
+PSNR/LPIPS on LOLBlur, edge preservation IoU, and visual comparison of
+sharpening artifacts on challenging motion-blur cases.
+
+
+RQ4 -- ç
+--------------------------------------------
+
+Does augmenting amplitude-based frequency losses with explicit phase gradient
+consistency preserve edge and structural detail during illumination
+enhancement, and does this yield measurable improvement over amplitude-only
+supervision?
+
+Testable via: Ablation experiment 3 (Baseline vs. +Freq). Measured by LPIPS
+(perceptual detail), SSIM (structural similarity), and frequency-domain
+analysis comparing phase spectra of predictions vs. ground truth.
+
+
+RQ5 -- Complementarity of Physics Priors
+-----------------------------------------
+
+Are the three proposed physics-guided losses complementary -- i.e., does their
+combination yield gains beyond what any individual or pairwise combination
+achieves -- and do they address distinct aspects of low-light image
+degradation?
+
+Testable via: Full ablation matrix (experiments 0-7). If the full method
+(experiment 7) consistently outperforms all subsets, complementarity is
+supported. Interaction effects can be quantified by comparing individual gains
+vs. combined gains.
+
+
+RQ6 -- Cross-Domain Generalization
+-----------------------------------
+
+Do physics-guided losses improve zero-shot generalization to unseen datasets
+and degradation types (LOLv2-Real, LOLv2-Synthetic, LSRW-Huawei, LSRW-Nikon),
+suggesting that physics-based regularization encodes transferable priors rather
+than dataset-specific patterns?
+
+Testable via: Cross-dataset evaluation (Section 4.4.2). Measured by the
+performance gap between in-domain (LOLBlur) and out-of-domain benchmarks for
+the baseline vs. full method. A narrower gap indicates better generalization.
+
+
+================================================================================
+COMPACT FORMULATION (for space-constrained versions)
+================================================================================
+
+If the proposal has page limits, the questions can be condensed:
+
+  RQ1: Can physics-guided losses improve low-light restoration quality and
+       generalization without architectural changes?
+
+  RQ2: Does Retinex-based regularization improve illumination modeling over
+       generic losses?
+
+  RQ3: Does blur-aware gradient matching reduce deblurring artifacts beyond
+       edge-only supervision?
+
+  RQ4: Does phase-enhanced frequency loss preserve structural detail during
+       illumination enhancement?
+
+  RQ5: Are the three physics-guided losses complementary?
+
+  RQ6: Do physics-based losses improve cross-dataset generalization?
+
+
+================================================================================
+MAPPING TO PROPOSAL STRUCTURE
+================================================================================
+
+  Research Question       Maps to Objective                   Answered by
+  --------------------    --------------------------------    -------------------------
+  RQ1 (overall)           Full method                         Exp 7 vs. Baseline
+  RQ2 (Retinex)           S3.1 Retinex Decomposition Loss     Experiments 1, 4, 5, 7
+  RQ3 (Blur)              S3.2 Blur-Aware Gradient Loss        Experiments 2, 4, 6, 7
+  RQ4 (Phase)             S3.3 Phase-Enhanced Frequency Loss   Experiments 3, 5, 6, 7
+  RQ5 (Complementarity)   S4.4.3 Ablation Studies             Full ablation matrix (0-7)
+  RQ6 (Generalization)    S4.4.6 Success Criteria             Cross-dataset evaluation
+
+
+================================================================================
+SAMPLE PROSE FOR INSERTION INTO PROPOSAL
+================================================================================
+
+The following text can be inserted as Section 2.5 (before the current Section 3):
+
+    2.5 Research Questions
+
+    Given the limitations outlined above, this study seeks to answer the
+    following questions:
+
+    RQ1: To what extent can physics-guided loss functions -- encoding Retinex
+    decomposition, blur formation physics, and Fourier-domain phase structure --
+    improve the quality, generalization, and physical plausibility of deep
+    learning-based low-light image restoration, without requiring architectural
+    modifications?
+
+    This primary question is decomposed into four specific sub-questions:
+
+    RQ2: Does enforcing illumination smoothness and reconstruction consistency
+    through Retinex-based loss terms yield more physically plausible
+    decompositions and better restoration quality than generic losses alone?
+
+    RQ3: Does gradient consistency under re-blurring improve deblurring fidelity
+    and reduce unnatural sharpening artifacts compared to edge-only supervision?
+
+    RQ4: Does augmenting amplitude-based frequency losses with phase gradient
+    consistency preserve structural detail during illumination enhancement?
+
+    RQ5: Are the proposed physics-guided losses complementary, and do they
+    improve zero-shot generalization to unseen datasets and degradation types?
+
+    These questions are directly addressed through the ablation studies and
+    cross-dataset experiments described in Section 4.4.
+
+
+================================================================================
+NOTES
+================================================================================
+
+- RQ2-RQ4 are each directly testable via a single ablation toggle, making them
+  experimentally clean.
+
+- RQ5 addresses a higher-level concern (complementarity) that reviewers often
+  ask about when multiple loss terms are proposed.
+
+- RQ6 is merged into RQ5 in the prose version to keep the count manageable, but
+  can be split out if the committee prefers more granularity.
+
+- If the committee or supervisor requires a hypothesis-driven framing, each RQ
+  can be converted to a hypothesis (e.g., "H2: Retinex-based regularization
+  improves PSNR by at least 0.3 dB over the baseline on LOLBlur").

@@ -1,0 +1,47 @@
+{
+  "run": "stage4_physir_final",
+  "best_epoch": 300,
+  "weights": "ema",
+  "config_weights": {
+    "phase": 0.14,
+    "retinex": 0.18,
+    "blur": false,
+    "crop": 384,
+    "batch": 32
+  },
+  "results": {
+    "LOLBlur_test": {
+      "psnr": 27.285804612658918,
+      "ssim": 0.8838154776228799,
+      "lpips": 0.206914015116377
+    },
+    "LOLv2_lolv2": {
+      "psnr": 19.84754741689924,
+      "ssim": 0.7831978714466095,
+      "lpips": 0.36806846618652345
+    },
+    "LOLv2_lolv2_synth": {
+      "psnr": 18.213468873074365,
+      "ssim": 0.7966192305088043,
+      "lpips": 0.24153472408652304
+    },
+    "LSRW_Nikon": {
+      "psnr": 16.518660531753547,
+      "ssim": 0.48369555473327636,
+      "lpips": 0.35142192989587784,
+      "n": 20
+    },
+    "LSRW_Huawei": {
+      "psnr": 18.570533435775815,
+      "ssim": 0.5667955795923869,
+      "lpips": 0.46217313210169475,
+      "n": 30
+    },
+    "RealLOLBlur_noref": {
+      "niqe": 5.180342290118153,
+      "nrqm": 5.0336755632859544,
+      "musiq": 49.46673476745479
+    }
+  },
+  "per_image_csv": "/content/drive/MyDrive/PhysIR/stage4/per_image/per_image_stage4_physir_final.csv"
+}
