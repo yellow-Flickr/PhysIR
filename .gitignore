@@ -13,7 +13,10 @@ scheduler_test.py
 create_set.py
 *.csv
 /all_imgs
+.plans/
+.claude/
 *.mp4
+*.DS_STORE
 /OLD_models
 resave_models.py
 OLD_requirements.txt
