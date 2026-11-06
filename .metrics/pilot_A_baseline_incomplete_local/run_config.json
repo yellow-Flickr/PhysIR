@@ -1,0 +1,81 @@
+{
+  "datasets": {
+    "name": "LOLBlur",
+    "train": {
+      "low_path": "./data/datasets/LOLBlur/physir_train/low_blur_noise",
+      "high_path": "./data/datasets/LOLBlur/physir_train/high_sharp_scaled",
+      "crop_size": 256,
+      "batch_size": 4,
+      "n_workers": 4,
+      "use_flips": true
+    },
+    "val": {
+      "test_path": "./data/datasets/LOLBlur/physir_val",
+      "batch_size_test": 1,
+      "verbose": false,
+      "n_workers": 4
+    }
+  },
+  "network": {
+    "name": "DarkIR",
+    "img_channels": 3,
+    "width": 32,
+    "middle_blk_num_enc": 2,
+    "middle_blk_num_dec": 2,
+    "enc_blk_nums": [
+      1,
+      2,
+      3
+    ],
+    "dec_blk_nums": [
+      3,
+      1,
+      1
+    ],
+    "dilations": [
+      1,
+      4,
+      9
+    ],
+    "extra_depth_wise": true
+  },
+  "save": {
+    "pretrained": null,
+    "path": "./models/pilot_baseline_latest.pt",
+    "best": "./models/bests/pilot_baseline_best.pt",
+    "save_freq": 5,
+    "eval_freq": 5
+  },
+  "pixel_criterion": "l1",
+  "perceptual": false,
+  "edge": true,
+  "edge_weight": 0.05,
+  "edge_criterion": "l2",
+  "edge_reduction": "mean",
+  "frequency": false,
+  "enhance": true,
+  "enhance_weight": 0.01,
+  "enhance_criterion": "l1",
+  "enhance_reduction": "mean",
+  "physics_losses": {
+    "enabled": false
+  },
+  "train": {
+    "epochs": 50,
+    "lr_initial": 0.0002,
+    "weight_decay": 0.001,
+    "lr_scheme": "CosineAnnealing",
+    "eta_min": 1e-06,
+    "grad_clip": 1.0
+  },
+  "wandb": {
+    "init": false,
+    "project": "DarkIR-Physics",
+    "entity": null,
+    "name": "pilot_A_baseline",
+    "resume": false,
+    "id": null,
+    "dir": "./logs"
+  },
+  "Resize": false
+}
