@@ -1,0 +1,88 @@
+{
+  "Resize": false,
+  "datasets": {
+    "name": "LOLBlur",
+    "train": {
+      "batch_size": 4,
+      "crop_size": 256,
+      "high_path": "/kaggle/working/LOLBlur_split/physir_train/high_sharp_scaled",
+      "low_path": "/kaggle/working/LOLBlur_split/physir_train/low_blur_noise",
+      "n_workers": 4,
+      "use_flips": true
+    },
+    "val": {
+      "batch_size_test": 1,
+      "n_workers": 4,
+      "test_path": "/kaggle/working/LOLBlur_split/physir_val",
+      "verbose": false
+    }
+  },
+  "edge": true,
+  "edge_criterion": "l2",
+  "edge_reduction": "mean",
+  "edge_weight": 0.05,
+  "enhance": true,
+  "enhance_criterion": "l1",
+  "enhance_reduction": "mean",
+  "enhance_weight": 0.01,
+  "frequency": false,
+  "network": {
+    "dec_blk_nums": [
+      3,
+      1,
+      1
+    ],
+    "dilations": [
+      1,
+      4,
+      9
+    ],
+    "enc_blk_nums": [
+      1,
+      2,
+      3
+    ],
+    "extra_depth_wise": true,
+    "img_channels": 3,
+    "middle_blk_num_dec": 2,
+    "middle_blk_num_enc": 2,
+    "name": "DarkIR",
+    "width": 32
+  },
+  "perceptual": false,
+  "physics_losses": {
+    "blur": true,
+    "blur_weight": 0.05,
+    "enabled": true,
+    "phase": false,
+    "phase2_start": 9999,
+    "phase3_start": 1,
+    "phase4_start": 9999,
+    "retinex": false
+  },
+  "pixel_criterion": "l1",
+  "save": {
+    "best": "/kaggle/working/pilot_D_blur_best.pt",
+    "eval_freq": 5,
+    "path": "/kaggle/working/pilot_D_blur_latest.pt",
+    "perceptual_eval_epochs": [
+      10,
+      30,
+      50
+    ],
+    "pretrained": null,
+    "save_freq": 5
+  },
+  "train": {
+    "epochs": 50,
+    "eta_min": 1e-06,
+    "grad_clip": 1.0,
+    "lr_initial": 0.00028,
+    "lr_scheme": "CosineAnnealing",
+    "weight_decay": 0.001
+  },
+  "wandb": {
+    "init": false,
+    "name": "pilot_D_blur"
+  }
+}

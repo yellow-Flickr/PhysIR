@@ -1,0 +1,17 @@
+[
+ {
+  "idx": 528,
+  "delta_psnr": 5.520662307739258,
+  "percentile": 95
+ },
+ {
+  "idx": 1727,
+  "delta_psnr": 0.18137359619140625,
+  "percentile": 50
+ },
+ {
+  "idx": 1454,
+  "delta_psnr": -4.709413528442383,
+  "percentile": 5
+ }
+]

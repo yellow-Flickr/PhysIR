@@ -40,3 +40,4 @@ computing_test.py
 /options/train
 *.md
 !README.md
+.DS_Store

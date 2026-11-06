@@ -1,0 +1,47 @@
+{
+  "run": "stage5_percep",
+  "best_epoch": 300,
+  "weights": "ema",
+  "config_weights": {
+    "phase": 0.14,
+    "retinex": 0.18,
+    "blur": false,
+    "crop": 384,
+    "batch": 32
+  },
+  "results": {
+    "LOLBlur_test": {
+      "psnr": 26.92652297375621,
+      "ssim": 0.8712629814280404,
+      "lpips": 0.21077586635947226
+    },
+    "LOLv2_lolv2": {
+      "psnr": 19.586369817083064,
+      "ssim": 0.778412653207779,
+      "lpips": 0.36845263361930847
+    },
+    "LOLv2_lolv2_synth": {
+      "psnr": 18.412345378483767,
+      "ssim": 0.7964300537109374,
+      "lpips": 0.23987669885158538
+    },
+    "RealLOLBlur_noref": {
+      "niqe": 5.433827200406794,
+      "nrqm": 4.567193754481083,
+      "musiq": 48.51151949142519
+    },
+    "LSRW_Nikon": {
+      "psnr": 16.43401641547532,
+      "ssim": 0.473111954331398,
+      "lpips": 0.34389096945524217,
+      "n": 20
+    },
+    "LSRW_Huawei": {
+      "psnr": 18.912948532687423,
+      "ssim": 0.5452535529931386,
+      "lpips": 0.4450279712677002,
+      "n": 30
+    }
+  },
+  "per_image_csv": "/content/drive/MyDrive/PhysIR/stage5_percep/per_image/per_image_stage5_percep.csv"
+}
