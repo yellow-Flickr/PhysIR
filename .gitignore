@@ -14,6 +14,9 @@ create_set.py
 *.csv
 /all_imgs
 .plans/
+.metrics/
+.notebooks/
+.errors/
 .claude/
 *.mp4
 *.DS_STORE
@@ -32,7 +35,6 @@ testing_two_pipeline.py
 /archs/lednet_archs
 # /archs/retinexformer.py
 metrics.sh
-.gitignore
 /options/test/exdark.yml
 /data/datasets/*
 
