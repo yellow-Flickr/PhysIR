@@ -43,3 +43,4 @@ metrics.sh
 /.metrics
 /.error
 /.notebooks
+.claude/.DS_Store
