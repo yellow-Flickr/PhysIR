@@ -10,116 +10,121 @@ except:
     from datapipeline import *
     from utils import *
 
-def main_dataset_all_lol(rank = 1, test_path='../../data/datasets/', batch_size_test=1, verbose=False,
-                       num_workers=1, world_size = 1):
-
-    # now load the LOLv2_real dataset
-    PATH_VALID = os.path.join(test_path, 'LOL-v2/Real_captured', 'test')
-
-    # paths to the blur and sharp sets of images
-    paths_blur_valid = [os.path.join(PATH_VALID, 'Low', path) for path in os.listdir(os.path.join(PATH_VALID, 'Low'))]
-    paths_sharp_valid = [os.path.join(PATH_VALID, 'Normal', path) for path in os.listdir(os.path.join(PATH_VALID, 'Normal'))]        
-    
-
-    list_blur_valid_LOLv2_real = paths_blur_valid
-    list_sharp_valid_LOLv2_real = paths_sharp_valid
-
-    check_paths([list_blur_valid_LOLv2_real, list_sharp_valid_LOLv2_real])
-
+def _load_paired_flat(root, low_sub, high_sub, verbose, label):
+    """
+    Load a flat paired dataset from root/low_sub and root/high_sub.
+    Returns (list_low, list_high) or (None, None) if the path is missing.
+    """
+    low_dir  = os.path.join(root, low_sub)
+    high_dir = os.path.join(root, high_sub)
+    if not os.path.isdir(low_dir) or not os.path.isdir(high_dir):
+        if verbose:
+            print(f'  [{label}] skipped — path not found: {root}')
+        return None, None
+    low_paths  = sorted(os.path.join(low_dir,  p) for p in os.listdir(low_dir))
+    high_paths = sorted(os.path.join(high_dir, p) for p in os.listdir(high_dir))
     if verbose:
-        print('Images in the subsets of LOLv2-real:')
-        print("    -Images in the PATH_LOW_VALID folder: ", len(list_blur_valid_LOLv2_real))
-        print("    -Images in the PATH_HIGH_VALID folder: ", len(list_sharp_valid_LOLv2_real), '\n')
+        print(f'  [{label}] {len(low_paths)} pairs found')
+    return low_paths, high_paths
 
-    #------------------------------------------------------------------------
-    # now load the LOLv2_synth dataset    
-    PATH_VALID = os.path.join(test_path, 'LOL-v2/Synthetic', 'test')
-    
-    # paths to the blur and sharp sets of images 
-    paths_blur_valid = [os.path.join(PATH_VALID, 'Low', path) for path in os.listdir(os.path.join(PATH_VALID, 'Low'))]
-    paths_sharp_valid = [os.path.join(PATH_VALID, 'Normal', path) for path in os.listdir(os.path.join(PATH_VALID, 'Normal'))]        
 
-    list_blur_valid_LOLv2_synth = paths_blur_valid
-    list_sharp_valid_LOLv2_synth = paths_sharp_valid
-
-    # check if all the image routes are correct
-    check_paths([list_blur_valid_LOLv2_synth, list_sharp_valid_LOLv2_synth])
-
+def _load_paired_nested(root, low_sub, high_sub, verbose, label):
+    """
+    Load a nested paired dataset (one subfolder per video clip).
+    Returns (list_low, list_high) or (None, None) if the path is missing.
+    """
+    low_dir  = os.path.join(root, low_sub)
+    high_dir = os.path.join(root, high_sub)
+    if not os.path.isdir(low_dir) or not os.path.isdir(high_dir):
+        if verbose:
+            print(f'  [{label}] skipped — path not found: {root}')
+        return None, None
+    clips_low  = [os.path.join(low_dir,  c) for c in os.listdir(low_dir)]
+    clips_high = [os.path.join(high_dir, c) for c in os.listdir(high_dir)]
+    low_paths  = flatten_list_comprehension(
+        [sorted(os.path.join(c, f) for f in os.listdir(c)) for c in sorted(clips_low)])
+    high_paths = flatten_list_comprehension(
+        [sorted(os.path.join(c, f) for f in os.listdir(c)) for c in sorted(clips_high)])
     if verbose:
-        print('Images in the subsets of LOLv2-synth:')
-        print("    -Images in the PATH_LOW_VALID folder: ", len(list_blur_valid_LOLv2_synth))
-        print("    -Images in the PATH_HIGH_VALID folder: ", len(list_sharp_valid_LOLv2_synth), '\n')    
-
-    #------------------------------------------------------------------------  
-    # finally the LOLBlur dataset
-    PATH_VALID = os.path.join(test_path, 'LOLBlur', 'test')
-    
-    # paths to the blur and sharp sets of images
-    
-    paths_blur_valid = [os.path.join(PATH_VALID, 'low_blur_noise', path) for path in os.listdir(os.path.join(PATH_VALID, 'low_blur_noise'))]
-    paths_sharp_valid = [os.path.join(PATH_VALID, 'high_sharp_scaled', path) for path in os.listdir(os.path.join(PATH_VALID, 'high_sharp_scaled'))]        
-    
-    # extract the images from their corresponding folders, now we get a list of lists
-    paths_blur_valid = [[os.path.join(path_element, path_png) for path_png in os.listdir(path_element)] for path_element in paths_blur_valid ]
-    paths_sharp_valid = [[os.path.join(path_element, path_png) for path_png in os.listdir(path_element)] for path_element in paths_sharp_valid ]
+        print(f'  [{label}] {len(low_paths)} pairs found (nested clips)')
+    return low_paths, high_paths
 
 
-    list_blur_valid_lolblur = flatten_list_comprehension(paths_blur_valid)
-    list_sharp_valid_lolblur = flatten_list_comprehension(paths_sharp_valid)
+def _make_loader(low_paths, high_paths, batch_size, num_workers,
+                 world_size, rank, tensor_transform):
+    dataset = MyDataset_Crop(low_paths, high_paths, cropsize=None,
+                             tensor_transform=tensor_transform, test=True)
+    if world_size > 1:
+        sampler = DistributedSampler(dataset, num_replicas=world_size,
+                                     shuffle=True, rank=rank)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False,
+                            num_workers=num_workers, pin_memory=True,
+                            drop_last=False, sampler=sampler)
+    else:
+        sampler = None
+        loader  = DataLoader(dataset, batch_size=batch_size, shuffle=True,
+                             num_workers=num_workers, pin_memory=True,
+                             drop_last=False)
+    return loader, sampler
 
-    # check if all the image routes are correct
-    check_paths([list_blur_valid_lolblur, list_sharp_valid_lolblur])
 
+def main_dataset_all_lol(rank=1, test_path='../../data/datasets/',
+                         batch_size_test=1, verbose=False,
+                         num_workers=1, world_size=1):
+    """
+    Loads whichever of {LOLv2-real, LOLv2-synth, LOLBlur} test splits are present.
+    Missing datasets are skipped gracefully — no crash if LOLBlur/test/ is absent.
+    Returns a dict keyed by dataset name; only present datasets are included.
+    """
     if verbose:
-        print('Images in the subsets of LOL-Blur:')
-        print("    -Images in the PATH_LOW_VALID folder: ", len(list_blur_valid_lolblur))
-        print("    -Images in the PATH_HIGH_VALID folder: ", len(list_sharp_valid_lolblur), '\n')
-
-    #------------------------------------------------------------------------  
+        print('Loading All_LOL val sets from:', test_path)
 
     tensor_transform = transforms.ToTensor()
+    test_loader = {}
+    samplers    = []
 
-    # Load the datasets
-    test_dataset_lolv2 = MyDataset_Crop(list_blur_valid_LOLv2_real, list_sharp_valid_LOLv2_real, cropsize=None,
-                                  tensor_transform=tensor_transform, test=True)
+    # ── LOLv2-real ────────────────────────────────────────────────────────────
+    low, high = _load_paired_flat(
+        os.path.join(test_path, 'LOL-v2/Real_captured/test'),
+        'Low', 'Normal', verbose, 'lolv2-real')
+    if low is not None:
+        check_paths([low, high])
+        loader, samp = _make_loader(low, high, batch_size_test, num_workers,
+                                    world_size, rank, tensor_transform)
+        test_loader['lolv2'] = {'loader': loader, 'adapter': False}
+        if samp: samplers.append(samp)
 
-    test_dataset_lolv2_synth = MyDataset_Crop(list_blur_valid_LOLv2_synth, list_sharp_valid_LOLv2_synth, cropsize=None,
-                                  tensor_transform=tensor_transform, test=True)
-    
-    test_dataset_lolblur = MyDataset_Crop(list_blur_valid_lolblur, list_sharp_valid_lolblur, cropsize=None,
-                                  tensor_transform=tensor_transform, test=True)
+    # ── LOLv2-synth ───────────────────────────────────────────────────────────
+    low, high = _load_paired_flat(
+        os.path.join(test_path, 'LOL-v2/Synthetic/test'),
+        'Low', 'Normal', verbose, 'lolv2-synth')
+    if low is not None:
+        check_paths([low, high])
+        loader, samp = _make_loader(low, high, batch_size_test, num_workers,
+                                    world_size, rank, tensor_transform)
+        test_loader['lolv2_synth'] = {'loader': loader, 'adapter': False}
+        if samp: samplers.append(samp)
 
-    if world_size > 1:
-        # Now we need to apply the Distributed sampler
-        test_sampler_lolv2 = DistributedSampler(test_dataset_lolv2, num_replicas=world_size, shuffle= True, rank=rank)
-        test_sampler_lolv2_synth = DistributedSampler(test_dataset_lolv2_synth, num_replicas=world_size, shuffle= True, rank=rank)
-        test_sampler_lolblur = DistributedSampler(test_dataset_lolblur, num_replicas=world_size, shuffle= True, rank=rank)
+    # ── LOLBlur (nested clips) ─────────────────────────────────────────────────
+    low, high = _load_paired_nested(
+        os.path.join(test_path, 'LOLBlur/test'),
+        'low_blur_noise', 'high_sharp_scaled', verbose, 'lolblur')
+    if low is not None:
+        check_paths([low, high])
+        loader, samp = _make_loader(low, high, batch_size_test, num_workers,
+                                    world_size, rank, tensor_transform)
+        test_loader['lolblur'] = {'loader': loader, 'adapter': False}
+        if samp: samplers.append(samp)
 
-        samplers = []
+    if not test_loader:
+        raise FileNotFoundError(
+            f'No recognised val datasets found under {test_path}. '
+            'Expected LOL-v2/ and/or LOLBlur/test/.')
 
-        samplers.append(test_sampler_lolv2)
-        samplers.append(test_sampler_lolv2_synth)
-        samplers.append(test_sampler_lolblur)
+    if verbose:
+        print(f'  Active val sets: {list(test_loader.keys())}')
 
-        test_loader_lolv2 = DataLoader(dataset=test_dataset_lolv2, batch_size=batch_size_test, shuffle=False,
-                                num_workers=num_workers, pin_memory=True, drop_last=False, sampler = test_sampler_lolv2)
-        test_loader_lolv2_synth = DataLoader(dataset=test_dataset_lolv2_synth, batch_size=batch_size_test, shuffle=False,
-                                num_workers=num_workers, pin_memory=True, drop_last=False, sampler = test_sampler_lolv2_synth)
-        test_loader_lolblur = DataLoader(dataset=test_dataset_lolblur, batch_size=batch_size_test, shuffle=False,
-                                num_workers=num_workers, pin_memory=True, drop_last=False, sampler= test_sampler_lolblur)
-        
-    else:
-        test_loader_lolv2 = DataLoader(dataset=test_dataset_lolv2, batch_size=batch_size_test, shuffle=True,
-                                num_workers=num_workers, pin_memory=True, drop_last=False, sampler = None)
-        test_loader_lolv2_synth = DataLoader(dataset=test_dataset_lolv2_synth, batch_size=batch_size_test, shuffle=True,
-                                num_workers=num_workers, pin_memory=True, drop_last=False, sampler = None)                              
-        test_loader_lolblur = DataLoader(dataset=test_dataset_lolblur, batch_size=batch_size_test, shuffle=True,
-                                num_workers=num_workers, pin_memory=True, drop_last=False, sampler= None)       
-        samplers = None
-
-    test_loader = {'lolblur':{'loader':test_loader_lolblur, 'adapter': False}, 'lolv2':{'loader':test_loader_lolv2, 'adapter': False}, 'lolv2_synth':{'loader':test_loader_lolv2_synth, 'adapter': False}}
-
-    return test_loader, samplers
+    return test_loader, (samplers if samplers else None)
 
 if __name__ == '__main__':
     

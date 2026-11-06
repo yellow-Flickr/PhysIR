@@ -12,8 +12,14 @@ _SUPPORTED = {'.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'}
 
 
 def _collect_images(directory):
-    # rglob handles both flat datasets (LOLv2) and nested ones (LOLBlur video clips)
-    return sorted(str(p) for p in Path(directory).rglob('*') if p.suffix in _SUPPORTED)
+    # os.walk with followlinks=True handles symlinked clip dirs (LOLBlur split)
+    # and flat layouts (LOLv2); Path.rglob does not follow symlinked directories in Python < 3.13
+    paths = []
+    for root, _dirs, files in os.walk(directory, followlinks=True):
+        for f in files:
+            if Path(f).suffix in _SUPPORTED:
+                paths.append(os.path.join(root, f))
+    return sorted(paths)
 
 
 def create_train_loader(low_dir, high_dir,
